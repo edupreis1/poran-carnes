@@ -1,9 +1,17 @@
 const express = require('express');
 const session = require('express-session');
+const pgSession = require('connect-pg-simple')(session);
 const bcrypt = require('bcryptjs');
 const path = require('path');
+const { Pool } = require('pg');
 const { initDatabase, getDb } = require('./database');
 let db;
+
+// Separate pool for session store
+const sessionPool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: process.env.DATABASE_URL ? { rejectUnauthorized: false } : false
+});
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -11,10 +19,18 @@ const PORT = process.env.PORT || 3000;
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(session({
+  store: new pgSession({
+    pool: sessionPool,
+    tableName: 'session',
+    createTableIfMissing: true
+  }),
   secret: process.env.SESSION_SECRET || 'poran-secret-2024',
   resave: false,
   saveUninitialized: false,
-  cookie: { maxAge: 7 * 24 * 60 * 60 * 1000 }
+  cookie: { 
+    maxAge: 30 * 24 * 60 * 60 * 1000, // 30 dias
+    secure: false
+  }
 }));
 app.use(express.static(path.join(__dirname, 'public')));
 
@@ -220,6 +236,16 @@ app.get('/api/debug/orders', requireAuth, async (req, res) => {
   try {
     const rows = await db.prepare('SELECT client_id, week_label, boi_cas, nov_cas, days FROM orders ORDER BY created_at DESC LIMIT 20').all();
     res.json({ count: rows.length, rows, week_now: new Date().toISOString() });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// ---- DEBUG ----
+app.get('/api/debug/orders', requireAuth, async (req, res) => {
+  try {
+    const week = req.query.week || '';
+    const rows = await db.prepare('SELECT client_id, week_label, boi_cas, nov_cas, vac_cas, days FROM orders WHERE week_label LIKE ? ORDER BY created_at DESC LIMIT 20').all('%'+week+'%');
+    const weeks = await db.prepare("SELECT DISTINCT week_label FROM orders ORDER BY week_label DESC LIMIT 10").all();
+    res.json({ rows, weeks, currentWeek: req.query.week });
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
