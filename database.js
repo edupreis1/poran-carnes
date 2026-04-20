@@ -28,7 +28,12 @@ const db = {
         const params = (p.length===1 && Array.isArray(p[0])) ? p[0] : p;
         let pgSql = toPostgres(sql);
         const isInsert = pgSql.trim().toUpperCase().startsWith('INSERT');
-        if(isInsert && !pgSql.toUpperCase().includes('RETURNING')) pgSql += ' RETURNING id';
+        // Only add RETURNING id for tables that have an id column (not settings)
+        const noIdTables = ['settings'];
+        const hasNoId = noIdTables.some(t => pgSql.toLowerCase().includes('into '+t));
+        if(isInsert && !pgSql.toUpperCase().includes('RETURNING') && !hasNoId) {
+          pgSql += ' RETURNING id';
+        }
         const res = await pool.query(pgSql, params);
         return { lastInsertRowid: res.rows[0]?.id || 0 };
       }

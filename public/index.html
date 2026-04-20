@@ -265,7 +265,7 @@ main { max-width: 720px; margin: 0 auto; padding: 20px 16px 100px; }
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:7px">
       <label style="font-size:12px;color:var(--muted);white-space:nowrap">Prazo padrão</label>
       <select id="nd" style="flex:1;background:var(--surface);border:1px solid var(--border);border-radius:5px;padding:9px 12px;font-size:13px;font-family:var(--sans);color:var(--text)">
-        ${paymentOptions('14 Dias')}
+        <option value="14 Dias">14 Dias</option>
       </select>
     </div>
     <div style="display:flex;gap:8px">
@@ -348,14 +348,7 @@ main { max-width: 720px; margin: 0 auto; padding: 20px 16px 100px; }
       <div style="display:flex;gap:7px;margin-bottom:7px;align-items:center">
         <label style="font-size:12px;color:var(--muted);white-space:nowrap">Prazo</label>
         <select id="cfg-nd" style="flex:1;background:var(--card);border:1px solid var(--border2);border-radius:5px;padding:8px 12px;font-size:13px;font-family:var(--sans);color:var(--text)">
-          <option value="7">7 dias</option><option value="8">8 dias</option>
-          <option value="9">9 dias</option><option value="10">10 dias</option>
-          <option value="11">11 dias</option><option value="12">12 dias</option>
-          <option value="14" selected>14 dias</option><option value="15">15 dias</option>
-          <option value="16">16 dias</option><option value="18">18 dias</option>
-          <option value="21">21 dias</option><option value="25">25 dias</option>
-          <option value="28">28 dias</option><option value="30">30 dias</option>
-          <option value="38">38 dias</option>
+          <option value="14 Dias">14 Dias</option>
         </select>
         <label style="font-size:12px;color:var(--muted);white-space:nowrap">Tabela</label>
         <select id="cfg-ntab" style="flex:1;background:var(--card);border:1px solid var(--border2);border-radius:5px;padding:8px 12px;font-size:13px;font-family:var(--sans);color:var(--text)">
@@ -1295,8 +1288,15 @@ function saveCorteCfg(){
 }
 function toggleAddCard(){
   const el=document.getElementById('add-card');
-  el.style.display=el.style.display==='none'?'block':'none';
-  if(el.style.display==='block') document.getElementById('nn').focus();
+  if(!el) return;
+  const opening = el.style.display==='none' || el.style.display==='';
+  el.style.display = opening ? 'block' : 'none';
+  if(opening){
+    document.getElementById('nn').focus();
+    // Populate payment conditions select dynamically
+    const sel = document.getElementById('nd');
+    if(sel) sel.innerHTML = paymentOptions(PAYMENT_CONDITIONS[0]?.label || '14 Dias');
+  }
 }
 async function deleteClient(id){
   const c = clients.find(x=>x.id===id);
@@ -1342,10 +1342,13 @@ function showTab(id){
 
 // ---- CURRENT WEEK LABEL ----
 function weekLabel(){
+  // Use ISO week number for stable weekly grouping
   const d=new Date();
-  const y=d.getFullYear(), m=String(d.getMonth()+1).padStart(2,'0');
-  const w=Math.ceil(d.getDate()/7);
-  return `${y}-${m}-S${w}`;
+  const jan4 = new Date(d.getFullYear(), 0, 4);
+  const startOfWeek = new Date(jan4);
+  startOfWeek.setDate(jan4.getDate() - ((jan4.getDay()+6)%7));
+  const weekNum = Math.ceil(((d - startOfWeek) / 86400000 + 1) / 7);
+  return `${d.getFullYear()}-W${String(weekNum).padStart(2,'0')}`;
 }
 let WEEK = weekLabel();
 
@@ -1516,7 +1519,13 @@ function getCortePrice(ct, priceTable){
 // ---- CONFIG CLIENTS ----
 function toggleCfgAddClient(){
   const el=document.getElementById('cfg-add-client');
-  if(el) el.style.display=el.style.display==='none'?'block':'none';
+  if(!el) return;
+  const isHidden = el.style.display==='none' || el.style.display==='';
+  el.style.display = isHidden ? 'block' : 'none';
+  if(isHidden){
+    const sel = document.getElementById('cfg-nd');
+    if(sel) sel.innerHTML = paymentOptions(PAYMENT_CONDITIONS[0]?.label || '14 Dias');
+  }
 }
 
 async function cfgAddClient(){
@@ -1626,6 +1635,7 @@ async function loadAll(){
   }
 
   // Load orders for this week
+  console.log('[Poran] Loading orders for week:', WEEK);
   const ords=await api('GET',`/api/orders/${WEEK}`);
   orders={};
   if(ords){
