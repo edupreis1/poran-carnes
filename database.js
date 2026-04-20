@@ -95,12 +95,16 @@ async function initDatabase() {
     console.log(`${CLIENT_DATA.length} clientes carregados.`);
   }
 
-  // Migrate: add prices_json and update days column if needed
+  // Migrate: add new columns and fix days column type
   try {
     await pool.query("ALTER TABLE orders ADD COLUMN IF NOT EXISTS prices_json TEXT DEFAULT '{}'");
     await pool.query("ALTER TABLE orders ADD COLUMN IF NOT EXISTS capafile REAL DEFAULT 0");
     await pool.query("ALTER TABLE orders ADD COLUMN IF NOT EXISTS musculo REAL DEFAULT 0");
-  } catch(e) { /* columns may already exist */ }
+    // Migrate days from REAL to TEXT if needed
+    await pool.query("ALTER TABLE orders ALTER COLUMN days TYPE TEXT USING days::TEXT");
+    // Migrate clients.days_default from INTEGER to TEXT if needed  
+    await pool.query("ALTER TABLE clients ALTER COLUMN days_default TYPE TEXT USING days_default::TEXT");
+  } catch(e) { /* columns may already exist or already TEXT */ }
 
   // Default settings
   await pool.query(`INSERT INTO settings VALUES ('trucks','3') ON CONFLICT (key) DO NOTHING`);

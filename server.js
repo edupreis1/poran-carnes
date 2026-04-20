@@ -120,7 +120,9 @@ app.get('/api/orders/:weekLabel', requireAuth, async (req, res) => {
     const result = {};
     orders.forEach(o => {
       const key = String(o.client_id).includes('_') ? o.client_id : parseInt(o.client_id);
-      const entry = { _days: o.days || '14 Dias' };
+      // days stored as text label, handle legacy numeric values
+      const daysVal = o.days || '14 Dias';
+      const entry = { _days: isNaN(daysVal) ? daysVal : daysVal + ' Dias' };
       ORDER_FIELDS.forEach(f => entry[f] = o[f] || 0);
       // Restore custom prices
       try {
@@ -138,7 +140,11 @@ app.post('/api/orders/:weekLabel', requireAuth, async (req, res) => {
     const { clientId, qtd } = req.body;
     const week = req.params.weekLabel;
     const vals = ORDER_FIELDS.map(f => parseFloat(qtd[f]) || 0);
-    const days = qtd._days || '14 Dias';
+    // _days can be a string label "14 Dias" or legacy number 14
+    const daysRaw = qtd._days;
+    const days = daysRaw 
+      ? (isNaN(daysRaw) ? String(daysRaw) : daysRaw + ' Dias')
+      : '14 Dias';
     // Extract custom prices (_price_KEY fields)
     const prices = {};
     Object.keys(qtd).filter(k=>k.startsWith('_price_')).forEach(k=>{ prices[k]=qtd[k]; });
