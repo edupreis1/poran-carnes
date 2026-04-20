@@ -107,8 +107,13 @@ app.get('/api/orders/:weekLabel', requireAuth, async (req, res) => {
     const result = {};
     orders.forEach(o => {
       const key = String(o.client_id).includes('_') ? o.client_id : parseInt(o.client_id);
-      const entry = { _days: o.days };
+      const entry = { _days: o.days || '14 Dias' };
       ORDER_FIELDS.forEach(f => entry[f] = o[f] || 0);
+      // Restore custom prices
+      try {
+        const prices = JSON.parse(o.prices_json || '{}');
+        Object.assign(entry, prices);
+      } catch(e){}
       result[key] = entry;
     });
     res.json(result);
@@ -120,13 +125,18 @@ app.post('/api/orders/:weekLabel', requireAuth, async (req, res) => {
     const { clientId, qtd } = req.body;
     const week = req.params.weekLabel;
     const vals = ORDER_FIELDS.map(f => parseFloat(qtd[f]) || 0);
+    const days = qtd._days || '14 Dias';
+    // Extract custom prices (_price_KEY fields)
+    const prices = {};
+    Object.keys(qtd).filter(k=>k.startsWith('_price_')).forEach(k=>{ prices[k]=qtd[k]; });
+    const pricesJson = JSON.stringify(prices);
     const existing = await db.prepare('SELECT id FROM orders WHERE client_id = ? AND week_label = ?').get(String(clientId), week);
     if (existing) {
-      await db.prepare(`UPDATE orders SET ${ORDER_FIELDS.map(f=>f+'=?').join(',')},days=? WHERE client_id=? AND week_label=?`)
-        .run(...vals, qtd._days||14, String(clientId), week);
+      await db.prepare(`UPDATE orders SET ${ORDER_FIELDS.map(f=>f+'=?').join(',')},days=?,prices_json=? WHERE client_id=? AND week_label=?`)
+        .run(...vals, days, pricesJson, String(clientId), week);
     } else {
-      await db.prepare(`INSERT INTO orders (client_id,week_label,${ORDER_FIELDS.join(',')},days) VALUES (?,?,${ORDER_FIELDS.map(()=>'?').join(',')},?)`)
-        .run(String(clientId), week, ...vals, qtd._days||14);
+      await db.prepare(`INSERT INTO orders (client_id,week_label,${ORDER_FIELDS.join(',')},days,prices_json) VALUES (?,?,${ORDER_FIELDS.map(()=>'?').join(',')},?,?)`)
+        .run(String(clientId), week, ...vals, days, pricesJson);
     }
     res.json({ ok: true });
   } catch(e) { res.status(500).json({ error: e.message }); }

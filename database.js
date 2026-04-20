@@ -59,7 +59,7 @@ async function initDatabase() {
     filet45 REAL DEFAULT 0, filetbc REAL DEFAULT 0,
     coxmole REAL DEFAULT 0, coxduro REAL DEFAULT 0, patinho REAL DEFAULT 0, lagarto REAL DEFAULT 0,
     capafile REAL DEFAULT 0, musculo REAL DEFAULT 0,
-    days REAL DEFAULT 14, created_at TIMESTAMP DEFAULT NOW())`);
+    days TEXT DEFAULT '14 Dias', prices_json TEXT DEFAULT '{}', created_at TIMESTAMP DEFAULT NOW())`);
 
   await pool.query(`CREATE TABLE IF NOT EXISTS routes (
     id SERIAL PRIMARY KEY, week_label TEXT NOT NULL,
@@ -89,6 +89,13 @@ async function initDatabase() {
     }
     console.log(`${CLIENT_DATA.length} clientes carregados.`);
   }
+
+  // Migrate: add prices_json and update days column if needed
+  try {
+    await pool.query("ALTER TABLE orders ADD COLUMN IF NOT EXISTS prices_json TEXT DEFAULT '{}'");
+    await pool.query("ALTER TABLE orders ADD COLUMN IF NOT EXISTS capafile REAL DEFAULT 0");
+    await pool.query("ALTER TABLE orders ADD COLUMN IF NOT EXISTS musculo REAL DEFAULT 0");
+  } catch(e) { /* columns may already exist */ }
 
   // Default settings
   await pool.query(`INSERT INTO settings VALUES ('trucks','3') ON CONFLICT (key) DO NOTHING`);

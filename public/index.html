@@ -297,7 +297,6 @@ main { max-width: 720px; margin: 0 auto; padding: 20px 16px 100px; }
 <div class="panel" id="tab-email">
   <div style="display:flex;gap:8px;margin-bottom:14px;align-items:center">
     <button class="btn btn-s btn-sm" onclick="showTab('roteiro')">← Roteiro</button>
-    <button class="btn btn-p btn-sm" onclick="downloadAllWord()" style="margin-left:auto">⬇ Baixar tudo em Word</button>
   </div>
   <div id="email-out"></div>
   <div class="btn-row">
@@ -609,9 +608,9 @@ function toggleC(id){
 async function updDays(cid,v){
   const id=parseInt(cid);
   if(!orders[id]) orders[id]={};
-  orders[id]._days=parseInt(v);
+  orders[id]._days = v; // store as label string e.g. "14 Dias"
   const c=clients.find(x=>x.id===id);
-  if(c) c.days_default=parseInt(v);
+  if(c) c.days_default = v;
   await saveOrder(id);
 }
 function clearOrd(cid){orders[parseInt(cid)]={};renderPedidos();save();}
@@ -1181,7 +1180,7 @@ function renderEmail(){
     b.innerHTML=`<div class="eb-head"><div class="eb-title">TRUCK 0${t} — ${ids.length} entrega${ids.length!==1?'s':''}</div>
       <div style="display:flex;gap:6px">
         <button class="btn btn-s btn-sm" onclick="copyTxt('${pid}',this)">copiar</button>
-        <button class="btn btn-s btn-sm" onclick="downloadWordBlock('${pid}','Truck_0${t}')">⬇ Word</button>
+        <button class="btn btn-s btn-sm" onclick="downloadWordBlock('${pid}','Truck_0${t}')" title="Baixar em Word">⬇</button>
       </div></div>
       <pre class="eb-body" id="${pid}">${txt.trim()}</pre>`;
     out.appendChild(b);
@@ -1251,6 +1250,7 @@ function renderConfig(){
         </div>
       </div>
       <button class="mgr-btn" onclick="toggleEdit(${c.id})">editar</button>
+      <button class="mgr-btn" onclick="deleteClient(${c.id})" style="color:var(--accent)">excluir</button>
     </div>
     <div class="mgr-edit-panel" id="ep-${c.id}" style="display:none;background:var(--surface);border:1px solid var(--border);border-top:none;border-radius:0 0 6px 6px;padding:12px 14px;margin-top:-6px;margin-bottom:6px">
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
@@ -1298,6 +1298,21 @@ function toggleAddCard(){
   el.style.display=el.style.display==='none'?'block':'none';
   if(el.style.display==='block') document.getElementById('nn').focus();
 }
+async function deleteClient(id){
+  const c = clients.find(x=>x.id===id);
+  if(!c) return;
+  if(!confirm(`Excluir "${c.name}"? Esta ação não pode ser desfeita.`)) return;
+  await api('DELETE',`/api/clients/${id}`);
+  clients = clients.filter(x=>x.id!==id);
+  delete orders[id];
+  // Remove from routeOrder
+  for(const k of Object.keys(routeOrder)){
+    routeOrder[k] = routeOrder[k].filter(x=>parseInt(x)!==id);
+  }
+  renderConfig();
+  renderPedidos();
+}
+
 function toggleEdit(id){
   const ep=document.getElementById('ep-'+id);
   const allPanels=document.querySelectorAll('.mgr-edit-panel');
@@ -1442,6 +1457,7 @@ async function removePaymentCondition(idx){
   PAYMENT_CONDITIONS.splice(idx,1);
   await savePaymentConditions();
   renderPaymentConditions();
+  renderPedidos(); // update selects in open orders
 }
 
 async function savePaymentConditions(){
@@ -1543,6 +1559,7 @@ function renderConfigClients(){
         <div style="font-size:11px;color:var(--muted);font-family:var(--mono)">${c.cnpj||'—'} · ${c.days_default||14}d</div>
       </div>
       <button class="mgr-btn" onclick="toggleEdit(${c.id})">editar</button>
+      <button class="mgr-btn" onclick="deleteClient(${c.id})" style="color:var(--accent)">excluir</button>
     </div>
     <div class="mgr-edit-panel" id="ep-${c.id}" style="display:none;background:var(--surface);border:1px solid var(--border);border-top:none;border-radius:0 0 6px 6px;padding:12px 14px;margin-top:-5px;margin-bottom:6px">
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
@@ -1684,7 +1701,7 @@ async function setExtraQty(key, ctKey, rawVal){
 
 async function setExtraDays(key,v){
   if(!orders[key]) return;
-  orders[key]._days=parseInt(v);
+  orders[key]._days = v; // store as label string
   await saveExtraOrder(key);
 }
 
@@ -1728,12 +1745,11 @@ function setExtraTable(key, tableVal){
 async function updDays(cid,v){
   const cidInt=parseInt(cid);
   if(!orders[cidInt]) orders[cidInt]={};
-  orders[cidInt]._days=parseInt(v);
-  // Also update client default so it persists when order is cleared
-  const c=clients.find(x=>x.id===parseInt(cid));
-  if(c) c.days_default=parseInt(v);
-  await saveOrder(cid);
-  await api('PUT',`/api/clients/${cid}`,{name:c?.name,code:c?.code||'',cnpj:c?.cnpj||'',email:c?.email||'',days_default:parseInt(v),supplier_id:c?.supplier_id||null});
+  orders[cidInt]._days = v; // store as label string
+  const c=clients.find(x=>x.id===cidInt);
+  if(c) c.days_default = v;
+  await saveOrder(cidInt);
+  if(c) await api('PUT',`/api/clients/${cidInt}`,{name:c.name,code:c.code||'',cnpj:c.cnpj||'',email:c.email||'',days_default:v,price_table:c.price_table||''});
 }
 
 // patch clearOrd to save
