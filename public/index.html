@@ -421,7 +421,8 @@ let orders = {};        // {clientId: {key:qty, ..., _days:14}}
 let routeOrder = {};    // {t1:[cid,...], t2:[...], unassigned:[...]}
 let truckDates = {};    // {t1:{load:'2026-03-28', deliver:'2026-03-31'}, ...}
 let PRICE_TABLES = { A:[], B:[], C:[] };
-let PAYMENT_CONDITIONS = []; // [{id, label, days}] // price overrides per table
+let PAYMENT_CONDITIONS = []; // [{id, label, days}]
+let suppliers = []; // kept for backward compat (supplier feature removed but refs remain)
 let currentPriceTab = 'base'; // which tab is active in Config
 let cfg = {trucks:3, min:12000, max:17000};
 
@@ -1342,13 +1343,16 @@ function showTab(id){
 
 // ---- CURRENT WEEK LABEL ----
 function weekLabel(){
-  // Use ISO week number for stable weekly grouping
-  const d=new Date();
-  const jan4 = new Date(d.getFullYear(), 0, 4);
-  const startOfWeek = new Date(jan4);
-  startOfWeek.setDate(jan4.getDate() - ((jan4.getDay()+6)%7));
-  const weekNum = Math.ceil(((d - startOfWeek) / 86400000 + 1) / 7);
-  return `${d.getFullYear()}-W${String(weekNum).padStart(2,'0')}`;
+  // Use Monday of current week as stable label (never changes mid-week)
+  const d = new Date();
+  const day = d.getDay(); // 0=Sun, 1=Mon...
+  const diff = d.getDate() - day + (day===0 ? -6 : 1); // adjust to Monday
+  const monday = new Date(d);
+  monday.setDate(diff);
+  const y = monday.getFullYear();
+  const m = String(monday.getMonth()+1).padStart(2,'0');
+  const dd = String(monday.getDate()).padStart(2,'0');
+  return `${y}-${m}-${dd}`; // e.g. "2026-04-20" — stable all week
 }
 let WEEK = weekLabel();
 
@@ -1378,10 +1382,15 @@ async function saveOrder(cid){
   const cidInt=parseInt(cid);
   const o=orders[cidInt]||{};
   const hasAny=CORTES.some(ct=>(parseFloat(o[ct.key])||0)>0);
-  if(!hasAny){
-    await api('DELETE',`/api/orders/${WEEK}/${cidInt}`);
-  } else {
-    await api('POST',`/api/orders/${WEEK}`,{clientId:cidInt, qtd:o});
+  try {
+    if(!hasAny){
+      await api('DELETE',`/api/orders/${WEEK}/${cidInt}`);
+    } else {
+      const result = await api('POST',`/api/orders/${WEEK}`,{clientId:cidInt, qtd:o});
+      if(!result || !result.ok) console.error('[Poran] saveOrder failed:', result);
+    }
+  } catch(e) {
+    console.error('[Poran] saveOrder error:', e);
   }
 }
 
@@ -1433,6 +1442,11 @@ async function loadPaymentConditions(){
     ];
   }
   renderPaymentConditions();
+  // Populate static form selects with payment conditions
+  ['nd','cfg-nd'].forEach(id=>{
+    const sel=document.getElementById(id);
+    if(sel&&PAYMENT_CONDITIONS.length) sel.innerHTML=paymentOptions(PAYMENT_CONDITIONS[0]?.label||'14 Dias');
+  });
 }
 
 function renderPaymentConditions(){
