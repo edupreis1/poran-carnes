@@ -428,8 +428,16 @@ let cfg = {trucks:3, min:12000, max:17000};
 
 // ---- HELPERS ----
 function gc(key){ return CORTES.find(c=>c.key===key); }
-function cKg(cid){ const o=orders[parseInt(cid)]||{}; return CORTES.reduce((s,ct)=>s+(parseFloat(o[ct.key])||0)*ct.kg,0); }
-function hasOrd(cid){ const o=orders[parseInt(cid)]||{}; return CORTES.some(ct=>(parseFloat(o[ct.key])||0)>0); }
+function cKg(cid){
+  const key = String(cid).includes('_') ? cid : parseInt(cid);
+  const o = orders[key]||{};
+  return CORTES.reduce((s,ct)=>s+(parseFloat(o[ct.key])||0)*ct.kg,0);
+}
+function hasOrd(cid){
+  const key = String(cid).includes('_') ? cid : parseInt(cid);
+  const o = orders[key]||{};
+  return CORTES.some(ct=>(parseFloat(o[ct.key])||0)>0);
+}
 function fKg(v){ return v>=1000?(v/1000).toFixed(1).replace('.',',')+'t':v+'kg'; }
 function pad(n){ return String(n).padStart(2,'0'); }
 function fP(p){ return p.toFixed(2).replace('.',','); }
