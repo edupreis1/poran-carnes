@@ -99,7 +99,7 @@ app.delete('/api/clients/:id', requireAuth, async (req, res) => {
 });
 
 // ---- ORDERS ----
-const ORDER_FIELDS = ['boi_cas','nov_cas','boi_ts','boi_tcc','boi_dtb','boi_pab','vac_cas','vac_ts','vac_tcc','vac_dtv','vac_pav','fig','rab','buc','cor','cup','san','lom','dia','ind','cfile','alcatra','maminha','filet45','filetbc','coxmole','coxduro','patinho','lagarto'];
+const ORDER_FIELDS = ['boi_cas','nov_cas','boi_ts','boi_tcc','boi_dtb','boi_pab','vac_cas','vac_ts','vac_tcc','vac_dtv','vac_pav','fig','rab','buc','cor','cup','san','lom','dia','ind','cfile','alcatra','maminha','filet45','filetbc','coxmole','coxduro','patinho','lagarto','capafile','musculo'];
 
 app.get('/api/orders/:weekLabel', requireAuth, async (req, res) => {
   try {

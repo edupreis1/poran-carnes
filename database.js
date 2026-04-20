@@ -58,6 +58,7 @@ async function initDatabase() {
     cfile REAL DEFAULT 0, alcatra REAL DEFAULT 0, maminha REAL DEFAULT 0,
     filet45 REAL DEFAULT 0, filetbc REAL DEFAULT 0,
     coxmole REAL DEFAULT 0, coxduro REAL DEFAULT 0, patinho REAL DEFAULT 0, lagarto REAL DEFAULT 0,
+    capafile REAL DEFAULT 0, musculo REAL DEFAULT 0,
     days REAL DEFAULT 14, created_at TIMESTAMP DEFAULT NOW())`);
 
   await pool.query(`CREATE TABLE IF NOT EXISTS routes (

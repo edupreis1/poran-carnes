@@ -78,6 +78,9 @@ main { max-width: 720px; margin: 0 auto; padding: 20px 16px 100px; }
 .qty-inp { width:64px; background:var(--card); border:1px solid var(--border2); border-radius:4px; padding:5px 8px; font-family:var(--mono); font-size:14px; font-weight:600; text-align:center; color:var(--text); }
 .qty-inp:focus { outline:none; border-color:var(--accent); }
 .qty-inp.z { color:var(--muted2); }
+.price-inp { width:64px; background:var(--surface); border:1px solid var(--border); border-radius:4px; padding:3px 6px; font-family:var(--mono); font-size:11px; text-align:center; color:var(--accent); }
+.price-inp:focus { outline:none; border-color:var(--accent); }
+.price-inp::placeholder { color:var(--muted2); font-size:10px; }
 
 .qty-inp::-webkit-inner-spin-button { opacity:0; }
 
@@ -254,19 +257,15 @@ main { max-width: 720px; margin: 0 auto; padding: 20px 16px 100px; }
   <div class="add-card" id="add-card" style="display:none;margin-bottom:14px">
     <div class="slabel" style="margin-bottom:10px">NOVO CLIENTE</div>
     <input type="text" id="nn" placeholder="Nome do cliente">
-    <input type="text" id="nc" placeholder="Código (ex: 14376)">
+    <div style="display:flex;gap:7px">
+      <input type="text" id="nc" placeholder="Código (ex: 14376)" style="flex:1">
+      <input type="text" id="ncnpj" placeholder="CNPJ" style="flex:2">
+    </div>
     <input type="email" id="ne" placeholder="E-mail (opcional)">
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:7px">
       <label style="font-size:12px;color:var(--muted);white-space:nowrap">Prazo padrão</label>
       <select id="nd" style="flex:1;background:var(--surface);border:1px solid var(--border);border-radius:5px;padding:9px 12px;font-size:13px;font-family:var(--sans);color:var(--text)">
-        <option value="7">7 dias</option><option value="8">8 dias</option>
-        <option value="9">9 dias</option><option value="10">10 dias</option>
-        <option value="11">11 dias</option><option value="12">12 dias</option>
-        <option value="14" selected>14 dias</option><option value="15">15 dias</option>
-        <option value="16">16 dias</option><option value="18">18 dias</option>
-        <option value="21">21 dias</option><option value="25">25 dias</option>
-        <option value="28">28 dias</option><option value="30">30 dias</option>
-        <option value="38">38 dias</option>
+        ${paymentOptions('14 Dias')}
       </select>
     </div>
     <div style="display:flex;gap:8px">
@@ -278,7 +277,7 @@ main { max-width: 720px; margin: 0 auto; padding: 20px 16px 100px; }
   <div style="display:flex;gap:8px;margin-bottom:12px;align-items:center">
     <div class="search-wrap" style="flex:1;margin-bottom:0">
       <span class="search-icon">⌕</span>
-      <input type="text" id="search" placeholder="Buscar cliente..." oninput="renderPedidos()">
+      <input type="text" id="search" placeholder="Buscar por nome ou código..." oninput="renderPedidos()">
     </div>
   </div>
   <div id="client-list"></div>
@@ -296,6 +295,10 @@ main { max-width: 720px; margin: 0 auto; padding: 20px 16px 100px; }
 
 <!-- EMAIL -->
 <div class="panel" id="tab-email">
+  <div style="display:flex;gap:8px;margin-bottom:14px;align-items:center">
+    <button class="btn btn-s btn-sm" onclick="showTab('roteiro')">← Roteiro</button>
+    <button class="btn btn-p btn-sm" onclick="downloadAllWord()" style="margin-left:auto">⬇ Baixar tudo em Word</button>
+  </div>
   <div id="email-out"></div>
   <div class="btn-row">
     <button class="btn btn-s btn-sm" onclick="showTab('roteiro')">← Roteiro</button>
@@ -313,18 +316,20 @@ main { max-width: 720px; margin: 0 auto; padding: 20px 16px 100px; }
   </div>
   <div class="cfg-section">
     <div class="slabel" style="margin-bottom:10px">PESOS E PREÇOS</div>
-    <div style="display:flex;gap:6px;margin-bottom:12px">
-      <button class="btn btn-sm" id="tab-preco-base" onclick="setPriceTab('base')"
-        style="background:var(--text);color:var(--bg);border:none">Base</button>
-      <button class="btn btn-s btn-sm" id="tab-preco-A" onclick="setPriceTab('A')">Tabela A</button>
-      <button class="btn btn-s btn-sm" id="tab-preco-B" onclick="setPriceTab('B')">Tabela B</button>
-      <button class="btn btn-s btn-sm" id="tab-preco-C" onclick="setPriceTab('C')">Tabela C</button>
-    </div>
-    <p style="font-size:12px;color:var(--muted);margin-bottom:10px" id="price-tab-desc">
-      Preços base — usados quando o cliente não tem tabela definida.
-    </p>
+
     <div id="cfg-cortes"></div>
     <button class="btn btn-p btn-sm" onclick="saveCorteCfg()" style="margin-top:10px">Salvar preços</button>
+  </div>
+
+  <div class="cfg-section">
+    <div class="slabel" style="margin-bottom:10px">CONDIÇÕES DE PAGAMENTO</div>
+    <p style="font-size:12px;color:var(--muted);margin-bottom:10px">Cadastre as condições usadas nos pedidos (ex: 14 DDL, 28/35 DDL, À vista)</p>
+    <div style="display:flex;gap:8px;margin-bottom:10px">
+      <input type="text" id="new-payment-label" placeholder="Ex: 14 DDL ou À vista"
+        style="flex:1;background:var(--surface);border:1px solid var(--border2);border-radius:5px;padding:8px 12px;font-size:13px;font-family:var(--sans);color:var(--text)">
+      <button class="btn btn-p btn-sm" onclick="addPaymentCondition()">+ Adicionar</button>
+    </div>
+    <div id="payment-conditions-list"></div>
   </div>
   <div class="cfg-section">
     <div class="slabel" style="margin-bottom:10px">CLIENTES</div>
@@ -407,6 +412,8 @@ let CORTES = [
   {key:'coxduro', label:'Coxão Duro',                 matcode:'11218', cat:'nobres', kg:25,  price:32.00, step:0.5,   unit:'CX'},
   {key:'patinho', label:'Patinho',                    matcode:'11220', cat:'nobres', kg:25,  price:33.00, step:0.5,   unit:'CX'},
   {key:'lagarto', label:'Lagarto',                    matcode:'11219', cat:'nobres', kg:25,  price:31.00, step:0.5,   unit:'CX'},
+  {key:'capafile',label:'Capa de Filé',               matcode:'11215', cat:'nobres', kg:25,  price:35.00, step:0.5, unit:'CX'},
+  {key:'musculo', label:'Músculo do Traseiro',         matcode:'11221', cat:'nobres', kg:25,  price:28.00, step:0.5, unit:'CX'},
 ];
 
 // Client base loaded from API
@@ -421,7 +428,8 @@ let clients = [];
 let orders = {};        // {clientId: {key:qty, ..., _days:14}}
 let routeOrder = {};    // {t1:[cid,...], t2:[...], unassigned:[...]}
 let truckDates = {};    // {t1:{load:'2026-03-28', deliver:'2026-03-31'}, ...}
-let PRICE_TABLES = { A:[], B:[], C:[] }; // price overrides per table
+let PRICE_TABLES = { A:[], B:[], C:[] };
+let PAYMENT_CONDITIONS = []; // [{id, label, days}] // price overrides per table
 let currentPriceTab = 'base'; // which tab is active in Config
 let cfg = {trucks:3, min:12000, max:17000};
 
@@ -475,7 +483,7 @@ function renderPedidos(){
   let tKg=0,tBoi=0,tVac=0,tCom=0;
 
   clients.forEach((c,i)=>{
-    if(q&&!c.name.toLowerCase().includes(q)) return;
+    if(q&&!c.name.toLowerCase().includes(q)&&!String(c.code||'').toLowerCase().includes(q)) return;
     const o=orders[c.id]||{};
     const kg=cKg(c.id), ord=hasOrd(c.id);
     if(ord){tKg+=kg;tCom++;}
@@ -493,15 +501,25 @@ function renderPedidos(){
       return `<div class="cg"><span class="cg-label ${cls}">${label}</span>
         <div class="cg-grid">${items.map(ct=>`
           <div class="cr">
-            <div class="cr-info"><div class="cr-name">${ct.label}</div><div class="cr-sub">${ct.kg}kg · R$${fP(getCortePrice(ct, o._priceTable||c.price_table||""))}</div></div>
-            <input class="qty-inp${(parseFloat(o[ct.key])||0)===0?' z':''}" type="text"
-              inputmode="decimal"
-              id="q-${c.id}-${ct.key}"
-              value="${o[ct.key]||''}"
-              placeholder="${ct.step===0.5?'0.5':'0'}"
-              onblur="setQty(${c.id},'${ct.key}',this.value)"
-              onkeydown="if(event.key==='Enter'){this.blur()}"
-              oninput="this.value=this.value.replace(/[^0-9.,]/g,'').replace(',','.')">
+            <div class="cr-info"><div class="cr-name">${ct.label}</div><div class="cr-sub">${ct.kg}kg · R$${fP(o["_price_"+ct.key] ?? ct.price)}</div></div>
+            <div style="display:flex;flex-direction:column;align-items:center;gap:3px">
+              <input class="qty-inp${(parseFloat(o[ct.key])||0)===0?' z':''}" type="text"
+                inputmode="decimal"
+                id="q-${c.id}-${ct.key}"
+                value="${o[ct.key]||''}"
+                placeholder="0"
+                onblur="setQty(${c.id},'${ct.key}',this.value)"
+                onkeydown="if(event.key==='Enter'){this.blur()}"
+                oninput="this.value=this.value.replace(/[^0-9.,]/g,'').replace(',','.')">
+              <input class="price-inp" type="text" inputmode="decimal"
+                id="p-${c.id}-${ct.key}"
+                value="${o['_price_'+ct.key]||''}"
+                placeholder="R$${fP(ct.price)}"
+                title="Editar preço deste corte"
+                onblur="setOrderPrice(${c.id},'${ct.key}',this.value)"
+                onkeydown="if(event.key==='Enter'){this.blur()}"
+                oninput="this.value=this.value.replace(/[^0-9.,]/g,'').replace(',','.')">
+            </div>
           </div>`).join('')}
         </div></div>`;
     }).join('');
@@ -520,15 +538,9 @@ function renderPedidos(){
         <div class="meta-row">
           <label>Prazo</label>
           <select class="ds" onchange="updDays(${c.id},this.value)">
-            ${[7,8,9,10,11,12,14,15,16,18,21,25,28,30,38].map(d=>`<option value="${d}"${(o._days||(c.days_default||14))==d?' selected':''}>${d} dias</option>`).join('')}
+            ${paymentOptions(o._days||c.days_default||'14 Dias')}
           </select>
-          <label>Tabela</label>
-          <select class="ds" onchange="updOrderTable(${c.id},this.value)">
-            <option value="" ${!(o._priceTable||c.price_table)?'selected':''}>Base</option>
-            <option value="A" ${(o._priceTable||c.price_table)==='A'?'selected':''}>A</option>
-            <option value="B" ${(o._priceTable||c.price_table)==='B'?'selected':''}>B</option>
-            <option value="C" ${(o._priceTable||c.price_table)==='C'?'selected':''}>C</option>
-          </select>
+
           <button class="btn btn-s btn-sm" onclick="addExtraPedido(${c.id})" style="margin-left:auto;font-size:11px">+ Pedido</button>
           <button class="clr-btn" onclick="clearOrd(${c.id})">Limpar pedido</button>
         </div>
@@ -573,15 +585,9 @@ function renderPedidos(){
           <div class="meta-row" style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border)">
             <label>Prazo</label>
             <select class="ds" onchange="setExtraDays('${key}',this.value)">
-              ${[7,8,9,10,11,12,14,15,16,18,21,25,28,30,38].map(d=>`<option value="${d}"${(eo._days||(c.days_default||14))==d?' selected':''}>${d} dias</option>`).join('')}
+              ${paymentOptions(eo._days||c.days_default||'14 Dias')}
             </select>
-            <label>Tabela</label>
-            <select class="ds" onchange="setExtraTable('${key}',this.value)">
-              <option value="" ${!(eo._priceTable||c.price_table)?'selected':''}>Base</option>
-              <option value="A" ${(eo._priceTable||c.price_table)==='A'?'selected':''}>A</option>
-              <option value="B" ${(eo._priceTable||c.price_table)==='B'?'selected':''}>B</option>
-              <option value="C" ${(eo._priceTable||c.price_table)==='C'?'selected':''}>C</option>
-            </select>
+
             <button class="btn btn-s btn-sm" onclick="removeExtraPedido('${key}')" style="color:var(--accent);margin-left:auto">Remover pedido</button>
           </div>
         </div>`;
@@ -1164,26 +1170,63 @@ function renderEmail(){
       CORTES.forEach(ct => {
         const q = o[ct.key]||0;
         if(q) {
-          const orderTable = o._priceTable || c.price_table || '';
-          const price = getCortePrice(ct, orderTable);
+          const price = o['_price_'+ct.key] ?? ct.price;
           txt += `${pad(q)} ${ct.label} (${ct.matcode}) R$ ${fP(price)}\n`;
         }
       });
-      txt+=`${o._days||14} Dias\n\n`;
+      txt+=`${paymentLabel(o._days||c.days_default||'14 Dias')}\n\n`;
     });
     const pid='ep'+t;
     const b=document.createElement('div'); b.className='eb';
     b.innerHTML=`<div class="eb-head"><div class="eb-title">TRUCK 0${t} — ${ids.length} entrega${ids.length!==1?'s':''}</div>
-      <button class="btn btn-s btn-sm" onclick="copyTxt('${pid}',this)">copiar</button></div>
+      <div style="display:flex;gap:6px">
+        <button class="btn btn-s btn-sm" onclick="copyTxt('${pid}',this)">copiar</button>
+        <button class="btn btn-s btn-sm" onclick="downloadWordBlock('${pid}','Truck_0${t}')">⬇ Word</button>
+      </div></div>
       <pre class="eb-body" id="${pid}">${txt.trim()}</pre>`;
     out.appendChild(b);
   }
   if(!any) out.innerHTML='<div class="alert al-w">Monte o roteiro primeiro.</div>';
 }
+function downloadWordBlock(id, filename){
+  const text = document.getElementById(id)?.textContent || '';
+  const wordHtml = `<html xmlns:o='urn:schemas-microsoft-com:office:office'
+    xmlns:w='urn:schemas-microsoft-com:office:word'
+    xmlns='http://www.w3.org/TR/REC-html40'>
+    <head><meta charset='utf-8'>
+    <style>body{font-family:"Courier New",monospace;font-size:11pt;}p{margin:0;white-space:pre-wrap;}</style>
+    </head><body>${text.split('\n').map(l=>`<p>${l.replace(/</g,'&lt;')||'&nbsp;'}</p>`).join('')}</body></html>`;
+  const blob = new Blob(['\ufeff'+wordHtml],{type:'application/msword'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href=url; a.download=`Roteiro_${filename}_${WEEK}.doc`; a.click();
+  URL.revokeObjectURL(url);
+}
+
+function downloadAllWord(){
+  const blocks = document.querySelectorAll('.eb-body');
+  let allText = '';
+  blocks.forEach(el=>{ allText += (el.textContent||'') + '\n\n'; });
+  downloadWordBlock('__all__', 'Completo');
+  // Inline version
+  const wordHtml = `<html xmlns:o='urn:schemas-microsoft-com:office:office'
+    xmlns:w='urn:schemas-microsoft-com:office:word'
+    xmlns='http://www.w3.org/TR/REC-html40'>
+    <head><meta charset='utf-8'>
+    <style>body{font-family:"Courier New",monospace;font-size:11pt;}p{margin:0;white-space:pre-wrap;}</style>
+    </head><body>${allText.split('\n').map(l=>`<p>${l.replace(/</g,'&lt;')||'&nbsp;'}</p>`).join('')}</body></html>`;
+  const blob = new Blob(['\ufeff'+wordHtml],{type:'application/msword'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href=url; a.download=`Roteiro_Completo_${WEEK}.doc`; a.click();
+  URL.revokeObjectURL(url);
+}
+
 function copyTxt(id,btn){ navigator.clipboard.writeText(document.getElementById(id).textContent).then(()=>{ btn.textContent='✓ copiado'; setTimeout(()=>btn.textContent='copiar',2000); }); }
 
 // ---- CONFIG ----
 function renderConfig(){
+  renderPaymentConditions();
   document.getElementById('cfg-n').value=cfg.trucks;
   document.getElementById('cfg-min').value=cfg.min;
   document.getElementById('cfg-max').value=cfg.max;
@@ -1362,6 +1405,71 @@ async function deleteSupplier(id){
   renderSuppliersList();renderSupplierFilter();
 }
 
+// ---- PAYMENT CONDITIONS ----
+async function loadPaymentConditions(){
+  const data = await api('GET','/api/settings');
+  if(data && data.payment_conditions){
+    PAYMENT_CONDITIONS = Array.isArray(data.payment_conditions) 
+      ? data.payment_conditions 
+      : JSON.parse(data.payment_conditions);
+  }
+  if(!PAYMENT_CONDITIONS.length){
+    // Defaults
+    PAYMENT_CONDITIONS = [
+      {id:1,label:'7 Dias'},{id:2,label:'14 Dias'},{id:3,label:'21 Dias'},
+      {id:4,label:'28 Dias'},{id:5,label:'14 DDL'},{id:6,label:'28 DDL'},
+      {id:7,label:'28/35 DDL'},{id:8,label:'À vista'}
+    ];
+  }
+  renderPaymentConditions();
+}
+
+function renderPaymentConditions(){
+  const el = document.getElementById('payment-conditions-list');
+  if(!el) return;
+  el.innerHTML = PAYMENT_CONDITIONS.map((p,i)=>`
+    <div class="cfg-row" style="padding:8px 12px">
+      <span class="cfg-label">${p.label}</span>
+      <button class="mgr-btn" onclick="removePaymentCondition(${i})" style="color:var(--accent)">remover</button>
+    </div>`).join('');
+}
+
+async function addPaymentCondition(){
+  const label = document.getElementById('new-payment-label')?.value.trim();
+  if(!label) return;
+  const id = Date.now();
+  PAYMENT_CONDITIONS.push({id, label});
+  document.getElementById('new-payment-label').value = '';
+  await savePaymentConditions();
+  renderPaymentConditions();
+  renderPedidos(); // refresh dropdowns
+}
+
+async function removePaymentCondition(idx){
+  PAYMENT_CONDITIONS.splice(idx,1);
+  await savePaymentConditions();
+  renderPaymentConditions();
+}
+
+async function savePaymentConditions(){
+  await api('POST','/api/settings',{payment_conditions: JSON.stringify(PAYMENT_CONDITIONS)});
+}
+
+function paymentLabel(val){
+  // val can be a label string or days number
+  const found = PAYMENT_CONDITIONS.find(p=>p.label===String(val));
+  if(found) return found.label;
+  // Legacy: if it's a number, show as "X Dias"
+  if(!isNaN(val)) return `${val} Dias`;
+  return String(val);
+}
+
+function paymentOptions(currentVal){
+  return PAYMENT_CONDITIONS.map(p=>
+    `<option value="${p.label}" ${currentVal===p.label?'selected':''}>${p.label}</option>`
+  ).join('');
+}
+
 // ---- PRICE TABLES ----
 async function loadPriceTables(){
   for(const t of ['A','B','C']){
@@ -1479,15 +1587,9 @@ function renderConfigClients(){
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
         <div><div style="font-size:10px;color:var(--muted);margin-bottom:3px">PRAZO PADRÃO</div>
           <select style="width:100%;background:var(--card);border:1px solid var(--border2);border-radius:4px;padding:7px 10px;font-size:13px;font-family:var(--sans);color:var(--text)" id="ef-days-${c.id}">
-            ${[7,8,9,10,11,12,14,15,16,18,21,25,28,30,38].map(d=>`<option value="${d}"${(c.days_default||14)==d?' selected':''}>${d} dias</option>`).join('')}
+            ${paymentOptions(c.days_default||'14 Dias')}
           </select></div>
-        <div><div style="font-size:10px;color:var(--muted);margin-bottom:3px">TABELA DE PREÇO</div>
-          <select style="width:100%;background:var(--card);border:1px solid var(--border2);border-radius:4px;padding:7px 10px;font-size:13px;font-family:var(--sans);color:var(--text)" id="ef-tab-${c.id}">
-            <option value="" ${!c.price_table?'selected':''}>— Base —</option>
-            <option value="A" ${c.price_table==='A'?'selected':''}>Tabela A</option>
-            <option value="B" ${c.price_table==='B'?'selected':''}>Tabela B</option>
-            <option value="C" ${c.price_table==='C'?'selected':''}>Tabela C</option>
-          </select></div>
+
       </div>
       <div style="display:flex;gap:8px">
         <button class="btn btn-p btn-sm" onclick="saveEditC(${c.id})" style="flex:1">Salvar</button>
@@ -1554,6 +1656,7 @@ async function loadAll(){
   }
 
   await loadPriceTables();
+  await loadPaymentConditions();
   renderPedidos();
 }
 
@@ -1622,6 +1725,19 @@ async function saveExtraOrder(key){
   }
 }
 
+function setOrderPrice(cid, ctKey, rawVal){
+  const cidInt = parseInt(cid);
+  if(!orders[cidInt]) orders[cidInt]={};
+  const cleaned = String(rawVal).trim().replace(',','.');
+  const val = parseFloat(cleaned);
+  if(!isNaN(val) && val > 0) {
+    orders[cidInt]['_price_'+ctKey] = val;
+  } else {
+    delete orders[cidInt]['_price_'+ctKey];
+  }
+  saveOrder(cidInt);
+}
+
 function updOrderTable(cid, tableVal){
   const cidInt=parseInt(cid);
   if(!orders[cidInt]) orders[cidInt]={};
@@ -1668,10 +1784,17 @@ async function clearAll(){
 async function addClient(){
   const name=document.getElementById('nn').value.trim();
   if(!name)return;
+  const code=document.getElementById('nc').value.trim();
+  // Check duplicate code
+  if(code && clients.find(c=>c.code && c.code===code)){
+    alert(`Já existe um cliente com o código ${code}!\nVerifique antes de continuar.`);
+    return;
+  }
   const days_default=parseInt(document.getElementById('nd')?.value)||14;
   const nc=await api('POST','/api/clients',{
     name,
     code:document.getElementById('nc').value.trim(),
+    cnpj:document.getElementById('ncnpj')?.value.trim()||'',
     email:document.getElementById('ne').value.trim(),
     days_default,
     price_table:''
@@ -1680,14 +1803,10 @@ async function addClient(){
   const newId = parseInt(nc.id);
   if(!newId){ alert('Erro: ID inválido retornado pelo servidor.'); return; }
   nc.id = newId;
-  // Ensure no existing client has this ID (safety check)
-  if(clients.find(c=>c.id===newId)){ 
-    await loadAll(); // reload everything fresh
-    return; 
-  }
+  if(clients.find(c=>c.id===newId)){ await loadAll(); return; }
   clients.push(nc);
-  orders[newId] = {}; // brand new empty object, no reference to anything
-  ['nn','nc','ne'].forEach(id=>{ const el=document.getElementById(id); if(el)el.value=''; });
+  orders[newId] = {};
+  ['nn','nc','ncnpj','ne'].forEach(id=>{ const el=document.getElementById(id); if(el)el.value=''; });
   toggleAddCard();
   renderPedidos();
 }
