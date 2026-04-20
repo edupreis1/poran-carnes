@@ -1230,14 +1230,8 @@ function renderConfig(){
   document.getElementById('cfg-n').value=cfg.trucks;
   document.getElementById('cfg-min').value=cfg.min;
   document.getElementById('cfg-max').value=cfg.max;
-  // Show prices from current tab or base
-  const priceSource = currentPriceTab==='base' ? CORTES :
-    CORTES.map(fc=>{
-      const tbl=PRICE_TABLES[currentPriceTab]||[];
-      const ov=tbl.find(x=>x.key===fc.key);
-      return {...fc, price: ov?ov.price:fc.price};
-    });
-  document.getElementById('cfg-cortes').innerHTML=priceSource.map(ct=>`
+  // Show current CORTES prices (loaded from server on startup)
+  document.getElementById('cfg-cortes').innerHTML=CORTES.map(ct=>`
     <div class="cfg-row">
       <span class="cfg-label">${ct.label}</span>
       <input type="number" class="cfg-in" id="ck-${ct.key}" value="${ct.kg}" step="0.5">
@@ -1356,11 +1350,10 @@ function save(){
   saveTimer=setTimeout(()=>flushSave(),600);
 }
 async function flushSave(){
-  // Save settings
-  await api('POST','/api/settings',{trucks:String(cfg.trucks),min_kg:String(cfg.min),max_kg:String(cfg.max),cortes:JSON.stringify(CORTES)});
+  // Save truck config only (NOT cortes — those are saved explicitly by user)
+  await api('POST','/api/settings',{trucks:String(cfg.trucks),min_kg:String(cfg.min),max_kg:String(cfg.max)});
   // Save route
   await api('POST',`/api/route/${WEEK}`,{routeOrder, truckDates});
-  // Orders are saved per-change in chg() and updDays()
 }
 
 async function saveOrder(cid){
@@ -1502,31 +1495,7 @@ function getCortePrice(ct, priceTable){
   return override ? override.price : ct.price;
 }
 
-async function saveCorteCfgForTable(){
-  const tab = currentPriceTab;
-  if(tab==='base'){
-    // Save to base CORTES
-    CORTES.forEach(ct=>{
-      const kg=parseFloat(document.getElementById('ck-'+ct.key)?.value);
-      const pr=parseFloat(document.getElementById('cp-'+ct.key)?.value);
-      if(!isNaN(kg)) ct.kg=kg;
-      if(!isNaN(pr)) ct.price=pr;
-    });
-    await api('POST','/api/settings',{cortes:JSON.stringify(CORTES)});
-    alert('Preços base salvos!');
-  } else {
-    // Save to price table
-    const tableCortes = CORTES.map(ct=>({
-      key:ct.key,
-      price: parseFloat(document.getElementById('cp-'+ct.key)?.value) || ct.price,
-      kg: parseFloat(document.getElementById('ck-'+ct.key)?.value) || ct.kg
-    }));
-    PRICE_TABLES[tab] = tableCortes;
-    await api('POST',`/api/price-table/${tab}`,{cortes:tableCortes});
-    alert(`Tabela ${tab} salva!`);
-  }
-  renderPedidos();
-}
+// saveCorteCfgForTable removed
 
 // ---- CONFIG CLIENTS ----
 function toggleCfgAddClient(){
@@ -1620,7 +1589,11 @@ async function loadAll(){
       CORTES = CORTES.map(fc => {
         const sc = serverCortes.find(s => s.key === fc.key);
         if(!sc) return fc;
-        return { ...fc, kg: sc.kg ?? fc.kg, price: sc.price ?? fc.price };
+        return {
+          ...fc,
+          kg:    (sc.kg    !== undefined && sc.kg    !== null && sc.kg    > 0) ? sc.kg    : fc.kg,
+          price: (sc.price !== undefined && sc.price !== null && sc.price > 0) ? sc.price : fc.price,
+        };
       });
     } catch(e) { /* keep frontend defaults */ }
   }
@@ -1834,8 +1807,26 @@ function saveCfg(){
   save();
 }
 
-// patch saveCorteCfg
-async function saveCorteCfg(){ await saveCorteCfgForTable(); }
+async function saveCorteCfg(){
+  CORTES.forEach(ct=>{
+    const kg = parseFloat(document.getElementById('ck-'+ct.key)?.value);
+    const pr = parseFloat(document.getElementById('cp-'+ct.key)?.value);
+    if(!isNaN(kg) && kg > 0) ct.kg = kg;
+    if(!isNaN(pr) && pr > 0) ct.price = pr;
+  });
+  try {
+    const result = await api('POST','/api/settings',{cortes:JSON.stringify(CORTES)});
+    if(result && result.ok) {
+      alert('✓ Pesos e preços salvos!');
+      renderConfig();
+      renderPedidos();
+    } else {
+      alert('Erro ao salvar: ' + JSON.stringify(result));
+    }
+  } catch(e) {
+    alert('Erro ao salvar: ' + e.message);
+  }
+}
 
 // route saving handled inside dDrop and dDropItem directly
 
