@@ -72,9 +72,7 @@ app.post('/api/clients', requireAuth, async (req, res) => {
   try {
     const { name, code, cnpj, email, days_default, price_table } = req.body;
     if (!name) return res.status(400).json({ error: 'Nome obrigatório' });
-    const result = await db.prepare(
-      'INSERT INTO clients (name,code,cnpj,email,days_default,price_table) VALUES (?,?,?,?,?,?)'
-    ).run(name, code||'', cnpj||'', email||'', days_default||14, price_table||'');
+    const result = await db.prepare('INSERT INTO clients (name,code,cnpj,email,days_default,price_table) VALUES (?,?,?,?,?,?)').run(name, code||'', cnpj||'', email||'', days_default||14, price_table||'');
     const newId = result.lastInsertRowid;
     if (!newId) return res.status(500).json({ error: 'Falha ao criar cliente' });
     res.json({ id: newId, name, code: code||'', cnpj: cnpj||'', email: email||'', days_default: days_default||14, price_table: price_table||'' });
@@ -84,8 +82,7 @@ app.post('/api/clients', requireAuth, async (req, res) => {
 app.put('/api/clients/:id', requireAuth, async (req, res) => {
   try {
     const { name, code, cnpj, email, days_default, price_table } = req.body;
-    await db.prepare('UPDATE clients SET name=?,code=?,cnpj=?,email=?,days_default=?,price_table=? WHERE id=?')
-      .run(name, code||'', cnpj||'', email||'', days_default||14, price_table||'', req.params.id);
+    await db.prepare('UPDATE clients SET name=?,code=?,cnpj=?,email=?,days_default=?,price_table=? WHERE id=?').run(name, code||'', cnpj||'', email||'', days_default||14, price_table||'', req.params.id);
     res.json({ ok: true });
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
@@ -131,21 +128,20 @@ app.post('/api/orders/:weekLabel', requireAuth, async (req, res) => {
     Object.keys(qtd).filter(k=>k.startsWith('_price_')).forEach(k=>{ prices[k]=qtd[k]; });
     const pricesJson = JSON.stringify(prices);
     const existing = await db.prepare('SELECT id FROM orders WHERE client_id = ? AND week_label = ?').get(String(clientId), week);
-    if (existing) {
-      await db.prepare(`UPDATE orders SET ${ORDER_FIELDS.map(f=>f+'=?').join(',')},days=?,prices_json=? WHERE client_id=? AND week_label=?`)
-        .run(...vals, days, pricesJson, String(clientId), week);
-    } else {
-      await db.prepare(`INSERT INTO orders (client_id,week_label,${ORDER_FIELDS.join(',')},days,prices_json) VALUES (?,?,${ORDER_FIELDS.map(()=>'?').join(',')},?,?)`)
-        .run(String(clientId), week, ...vals, days, pricesJson);
-    }
+    const stmt = existing
+      ? db.prepare(`UPDATE orders SET ${ORDER_FIELDS.map(f=>f+'=?').join(',')},days=?,prices_json=? WHERE client_id=? AND week_label=?`)
+      : db.prepare(`INSERT INTO orders (client_id,week_label,${ORDER_FIELDS.join(',')},days,prices_json) VALUES (?,?,${ORDER_FIELDS.map(()=>'?').join(',')},?,?)`);
+    const runParams = existing
+      ? [...vals, days, pricesJson, String(clientId), week]
+      : [String(clientId), week, ...vals, days, pricesJson];
+    await stmt.run(...runParams);
     res.json({ ok: true });
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
 app.delete('/api/orders/:weekLabel/:clientId', requireAuth, async (req, res) => {
   try {
-    await db.prepare('DELETE FROM orders WHERE client_id = ? AND week_label = ?')
-      .run(req.params.clientId, req.params.weekLabel);
+    await db.prepare('DELETE FROM orders WHERE client_id = ? AND week_label = ?').run(req.params.clientId, req.params.weekLabel);
     res.json({ ok: true });
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
@@ -195,8 +191,7 @@ app.post('/api/settings', requireAuth, async (req, res) => {
   try {
     for(const [k,v] of Object.entries(req.body)) {
       const val = typeof v === 'string' ? v : JSON.stringify(v);
-      await db.prepare('INSERT INTO settings (key,value) VALUES (?,?) ON CONFLICT (key) DO UPDATE SET value=?')
-        .run(k, val, val);
+      await db.prepare('INSERT INTO settings (key,value) VALUES (?,?) ON CONFLICT (key) DO UPDATE SET value=?').run(k, val, val);
     }
     res.json({ ok: true });
   } catch(e) { res.status(500).json({ error: e.message }); }
@@ -215,9 +210,16 @@ app.post('/api/price-table/:table', requireAuth, async (req, res) => {
   try {
     const key = 'table'+req.params.table;
     const val = JSON.stringify(req.body.cortes);
-    await db.prepare('INSERT INTO settings (key,value) VALUES (?,?) ON CONFLICT (key) DO UPDATE SET value=?')
-      .run(key, val, val);
+    await db.prepare('INSERT INTO settings (key,value) VALUES (?,?) ON CONFLICT (key) DO UPDATE SET value=?').run(key, val, val);
     res.json({ ok: true });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// ---- DEBUG ----
+app.get('/api/debug/orders', requireAuth, async (req, res) => {
+  try {
+    const rows = await db.prepare('SELECT client_id, week_label, boi_cas, nov_cas, days FROM orders ORDER BY created_at DESC LIMIT 20').all();
+    res.json({ count: rows.length, rows, week_now: new Date().toISOString() });
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
