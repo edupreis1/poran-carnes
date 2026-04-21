@@ -295,8 +295,12 @@ main { max-width: 720px; margin: 0 auto; padding: 20px 16px 100px; }
 
 <!-- EMAIL -->
 <div class="panel" id="tab-email">
-  <div style="display:flex;gap:8px;margin-bottom:14px;align-items:center">
+  <div style="display:flex;gap:8px;margin-bottom:14px;align-items:center;flex-wrap:wrap">
     <button class="btn btn-s btn-sm" onclick="showTab('roteiro')">← Roteiro</button>
+    <div style="margin-left:auto;display:flex;gap:6px;align-items:center">
+      <span style="font-size:11px;color:var(--muted);font-family:var(--mono)">código material:</span>
+      <button id="btn-toggle-code" class="btn btn-p btn-sm" onclick="toggleEmailCode()" style="min-width:44px">ON</button>
+    </div>
   </div>
   <div id="email-out"></div>
   <div class="btn-row">
@@ -375,13 +379,13 @@ let CORTES = [
   {key:'boi_cas', label:'Boi Casado',                 matcode:'10001', cat:'boi',    kg:295, price:24.00, step:0.5, unit:'PC'},
   {key:'nov_cas', label:'Novilha',                    matcode:'10003', cat:'boi',    kg:220, price:22.50, step:0.5, unit:'PC'},
   {key:'boi_ts',  label:'Traseiro Serrote Boi',       matcode:'10101', cat:'boi',    kg:75,  price:27.20, step:0.5,   unit:'PC'},
-  {key:'boi_tcc', label:'Traseiro Boi c/ Costela',    matcode:'10109', cat:'boi',    kg:115, price:26.70, step:0.5,   unit:'PC'},
+  {key:'boi_tcc', label:'Traseiro Capote de Boi',    matcode:'10109', cat:'boi',    kg:115, price:26.70, step:0.5,   unit:'PC'},
   {key:'boi_dtb', label:'Dianteiro de Boi',           matcode:'10102', cat:'boi',    kg:60,  price:22.00, step:0.5,   unit:'PC'},
   {key:'boi_pab', label:'Costela de Boi',             matcode:'10103', cat:'boi',    kg:18,  price:20.50, step:0.5,   unit:'PC'},
   // VACA — step 0.5 para casada, 1 para cortes
   {key:'vac_cas', label:'Vaca Casada',                matcode:'10002', cat:'vaca',   kg:230, price:22.50, step:0.5, unit:'PC'},
   {key:'vac_ts',  label:'Traseiro Serrote Vaca',      matcode:'10190', cat:'vaca',   kg:62,  price:27.20, step:0.5,   unit:'PC'},
-  {key:'vac_tcc', label:'Traseiro Vaca c/ Costela',   matcode:'10189', cat:'vaca',   kg:115, price:26.70, step:0.5,   unit:'PC'},
+  {key:'vac_tcc', label:'Traseiro Capote de Vaca',   matcode:'10189', cat:'vaca',   kg:115, price:26.70, step:0.5,   unit:'PC'},
   {key:'vac_dtv', label:'Dianteiro de Vaca',          matcode:'10191', cat:'vaca',   kg:41,  price:22.00, step:0.5,   unit:'PC'},
   {key:'vac_pav', label:'Costela de Vaca',            matcode:'10192', cat:'vaca',   kg:13,  price:20.50, step:0.5,   unit:'PC'},
   // MIÚDOS — caixas (CX)
@@ -421,7 +425,8 @@ let orders = {};        // {clientId: {key:qty, ..., _days:14}}
 let routeOrder = {};    // {t1:[cid,...], t2:[...], unassigned:[...]}
 let truckDates = {};    // {t1:{load:'2026-03-28', deliver:'2026-03-31'}, ...}
 let PRICE_TABLES = { A:[], B:[], C:[] };
-let PAYMENT_CONDITIONS = []; // [{id, label, days}]
+let PAYMENT_CONDITIONS = [];
+let emailShowCode = true; // toggle código do material no e-mail // [{id, label, days}]
 let suppliers = []; // kept for backward compat (supplier feature removed but refs remain)
 let currentPriceTab = 'base'; // which tab is active in Config
 let cfg = {trucks:3, min:12000, max:17000};
@@ -1240,19 +1245,27 @@ function renderEmail(){
         const q = o[ct.key]||0;
         if(q) {
           const price = o['_price_'+ct.key] ?? ct.price;
-          txt += `${pad(q)} ${ct.label} (${ct.matcode}) R$ ${fP(price)}\n`;
+          txt += emailShowCode ? `${pad(q)} ${ct.label} (${ct.matcode}) R$ ${fP(price)}\n` : `${pad(q)} ${ct.label} R$ ${fP(price)}\n`;
         }
       });
       txt+=`${paymentLabel(o._days||c.days_default||'14 Dias')}\n\n`;
     });
     const pid='ep'+t;
+    // Generate version without material codes
+    const txtNoCode = txt.replace(/\(\d{5}\)/g, '').replace(/  +/g,' ');
+    const pidNoCode = 'ep'+t+'nc';
     const b=document.createElement('div'); b.className='eb';
     b.innerHTML=`<div class="eb-head"><div class="eb-title">TRUCK 0${t} — ${ids.length} entrega${ids.length!==1?'s':''}</div>
-      <div style="display:flex;gap:6px">
+      <div style="display:flex;gap:6px;flex-wrap:wrap">
+        <span style="font-size:10px;color:var(--muted);font-family:var(--mono);align-self:center">c/ código:</span>
         <button class="btn btn-s btn-sm" onclick="copyTxt('${pid}',this)">copiar</button>
         <button class="btn btn-s btn-sm" onclick="downloadWordBlock('${pid}','Truck_0${t}')" title="Baixar em Word">⬇</button>
+        <span style="font-size:10px;color:var(--muted);font-family:var(--mono);align-self:center;margin-left:6px">s/ código:</span>
+        <button class="btn btn-s btn-sm" onclick="copyTxt('${pidNoCode}',this)">copiar</button>
+        <button class="btn btn-s btn-sm" onclick="downloadWordBlock('${pidNoCode}','Truck_0${t}_semcod')" title="Baixar em Word">⬇</button>
       </div></div>
-      <pre class="eb-body" id="${pid}">${txt.trim()}</pre>`;
+      <pre class="eb-body" id="${pid}">${txt.trim()}</pre>
+      <pre class="eb-body" id="${pidNoCode}" style="display:none">${txtNoCode.trim()}</pre>`;
     out.appendChild(b);
   }
   if(!any) out.innerHTML='<div class="alert al-w">Monte o roteiro primeiro.</div>';
@@ -1291,10 +1304,17 @@ function downloadAllWord(){
   URL.revokeObjectURL(url);
 }
 
+function toggleEmailCode(){
+  emailShowCode = !emailShowCode;
+  const btn = document.getElementById('btn-toggle-code');
+  if(btn) btn.textContent = emailShowCode ? 'ON' : 'OFF';
+  renderEmail(); // re-render with new setting
+}
+
 function copyTxt(id,btn){ navigator.clipboard.writeText(document.getElementById(id).textContent).then(()=>{ btn.textContent='✓ copiado'; setTimeout(()=>btn.textContent='copiar',2000); }); }
 
 // ---- CONFIG ----
-function renderConfig(){
+async function renderConfig(){
   renderPaymentConditions();
   document.getElementById('cfg-n').value=cfg.trucks;
   document.getElementById('cfg-min').value=cfg.min;
@@ -1303,9 +1323,9 @@ function renderConfig(){
   document.getElementById('cfg-cortes').innerHTML=CORTES.map(ct=>`
     <div class="cfg-row">
       <span class="cfg-label">${ct.label}</span>
-      <input type="number" class="cfg-in" id="ck-${ct.key}" value="${ct.kg}" step="0.5">
+      <input type="number" class="cfg-in" id="ck-${ct.key}" value="${ct.kg>0?ct.kg:''}" placeholder="${ct.kg}" step="0.5">
       <span class="cfg-unit">kg</span>
-      <input type="number" class="cfg-in" id="cp-${ct.key}" value="${fP(ct.price)}" step="0.01">
+      <input type="number" class="cfg-in" id="cp-${ct.key}" value="${ct.price>0?fP(ct.price):''}" placeholder="${fP(ct.price)}" step="0.01">
       <span class="cfg-unit">R$</span>
     </div>`).join('');
   renderConfigClients();
@@ -1414,7 +1434,18 @@ function showTab(id){
   document.getElementById('tab-'+id).classList.add('active');
   if(id==='roteiro') renderRoteiro();
   if(id==='email') renderEmail();
-  if(id==='config') renderConfig();
+  if(id==='config'){ 
+    // Reload settings to ensure latest prices show
+    api('GET','/api/settings').then(settings=>{
+      if(settings?.cortes){
+        try {
+          const sc = Array.isArray(settings.cortes) ? settings.cortes : JSON.parse(settings.cortes);
+          CORTES = CORTES.map(fc=>{ const s=sc.find(x=>x.key===fc.key); return s?{...fc,kg:s.kg??fc.kg,price:s.price??fc.price}:fc; });
+        } catch(e){}
+      }
+      renderConfig();
+    });
+  }
 }
 
 // ---- CURRENT WEEK LABEL ----
@@ -1937,8 +1968,11 @@ function saveCfg(){
 
 async function saveCorteCfg(){
   CORTES.forEach(ct=>{
-    const kg = parseFloat(document.getElementById('ck-'+ct.key)?.value);
-    const pr = parseFloat(document.getElementById('cp-'+ct.key)?.value);
+    const kgEl = document.getElementById('ck-'+ct.key);
+    const prEl = document.getElementById('cp-'+ct.key);
+    // Use value if filled, otherwise keep current
+    const kg = parseFloat(kgEl?.value || kgEl?.placeholder);
+    const pr = parseFloat((prEl?.value || prEl?.placeholder || '').replace(',','.'));
     if(!isNaN(kg) && kg > 0) ct.kg = kg;
     if(!isNaN(pr) && pr > 0) ct.price = pr;
   });
