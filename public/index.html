@@ -142,7 +142,7 @@ main { max-width: 720px; margin: 0 auto; padding: 20px 16px 100px; }
 
 /* DRAG ITEMS */
 .di { display: flex; align-items: center; gap: 8px; background: var(--card); border: 1px solid var(--border); border-radius: 5px; padding: 9px 11px; margin-bottom: 5px; cursor: default; user-select: none; transition: box-shadow .15s, opacity .15s; }
-.di[draggable="true"] { cursor: grab; }
+.di[draggable="true"] { cursor: default; }
 .di .di-handle, .di .di-name, .di .di-cuts, .di .di-kg, .di .di-ord { pointer-events: none; user-select: none; }
 .di.dragging { opacity: 0.5; cursor: grabbing; }
 .di.drag-over { border-top: 2px solid var(--accent); }
@@ -550,6 +550,15 @@ function renderPedidos(){
           <button class="btn btn-s btn-sm" onclick="addExtraPedido(${c.id})" style="margin-left:auto;font-size:11px">+ Pedido</button>
           <button class="clr-btn" onclick="clearOrd(${c.id})">Limpar pedido</button>
         </div>
+        <div style="padding:8px 0 4px">
+          <textarea
+            id="obs-${c.id}"
+            placeholder="Observação (aparece no e-mail em vermelho)..."
+            rows="2"
+            style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:5px;padding:8px 10px;font-size:12px;font-family:var(--sans);color:var(--text);resize:vertical"
+            onblur="setObs(${c.id},this.value)"
+          >${o._obs||''}</textarea>
+        </div>
       </div>`;
     list.appendChild(div);
     // Render extra pedidos for this client
@@ -601,6 +610,15 @@ function renderPedidos(){
             </select>
 
             <button class="btn btn-s btn-sm" onclick="removeExtraPedido('${key}')" style="color:var(--accent);margin-left:auto">Remover pedido</button>
+          </div>
+          <div style="padding:8px 0 4px">
+            <textarea
+              id="obs-${key}"
+              placeholder="Observação (aparece no e-mail em vermelho)..."
+              rows="2"
+              style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:5px;padding:8px 10px;font-size:12px;font-family:var(--sans);color:var(--text);resize:vertical"
+              onblur="setExtraObs('${key}',this.value)"
+            >${eo._obs||''}</textarea>
           </div>
         </div>`;
       list.appendChild(eDiv);
@@ -785,7 +803,7 @@ function renderRoteiro(){
   setTimeout(initTouchReorder, 50);
 }
 
-// ── Item inside a truck (draggable for reordering) ──────────
+// ── Item inside a truck — select position ────────────────
 function diHTML(key, order, color){
   const isExtra = String(key).includes('_');
   const cid = isExtra ? parseInt(String(key).split('_')[0]) : parseInt(key);
@@ -795,19 +813,44 @@ function diHTML(key, order, color){
   const kg = CORTES.reduce((s,ct)=>s+(parseFloat(o[ct.key])||0)*ct.kg,0);
   const cuts = CORTES.filter(ct=>(parseFloat(o[ct.key])||0)>0).map(ct=>`${o[ct.key]} ${ct.label}`).join(', ');
   const extraBadge = isExtra ? `<span style="font-size:10px;color:var(--accent);margin-left:4px">(extra)</span>` : '';
-  return `<div class="di" draggable="true" id="di-${key}" data-cid="${key}"
-    style="${isExtra?'border-left:3px solid var(--accent);':''}"
-    ondragstart="diDragStart(event,this)"
-    ondragend="diDragEnd(event)"
-    ondragover="diDragOver(event)"
-    ondrop="diDropReorder(event,this)">
-    <span class="di-handle" style="${color?'color:'+color:''}">⠿</span>
-    <span class="di-ord">${order}ª</span>
-    <span class="di-name">${c.name}${extraBadge}</span>
+  // Find which truck this key is in and how many items
+  let truckKey='', truckItems=[], truckNum=0;
+  for(const k of Object.keys(routeOrder)){
+    if(k.startsWith('t') && routeOrder[k].some(x=>String(x)===String(key))){
+      truckKey=k; truckNum=parseInt(k.replace('t',''));
+      truckItems=routeOrder[k]; break;
+    }
+  }
+  const posOptions = truckItems.map((_,i)=>
+    `<option value="${i}" ${i===order-1?'selected':''}>${i+1}ª</option>`
+  ).join('');
+  return `<div class="di" id="di-${key}" data-cid="${key}"
+    style="${isExtra?'border-left:3px solid var(--accent);':''}">
+    <select onchange="reorderInTruck('${key}',${truckNum},this.value)"
+      style="background:var(--surface);border:1px solid var(--border2);border-radius:4px;padding:3px 4px;font-size:11px;font-family:var(--mono);color:var(--text);width:46px">
+      ${posOptions}
+    </select>
+    <span class="di-name" style="flex:1">${c.name}${extraBadge}</span>
     <span class="di-cuts">${cuts}</span>
     <span class="di-kg">${fKg(kg)}</span>
-    <button onclick="removeFromTruck('${key}')" style="margin-left:auto;background:none;border:none;color:var(--muted2);cursor:pointer;font-size:16px;padding:0 4px;line-height:1" title="Remover do truck">×</button>
+    <button onclick="removeFromTruck('${key}')" style="background:none;border:none;color:var(--muted2);cursor:pointer;font-size:16px;padding:0 4px;line-height:1" title="Remover do truck">×</button>
   </div>`;
+}
+
+// Reorder item within truck by selecting new position
+function reorderInTruck(key, truckNum, newPosStr){
+  const destKey = 't'+truckNum;
+  const arr = routeOrder[destKey];
+  if(!arr) return;
+  const curIdx = arr.findIndex(x=>String(x)===String(key));
+  if(curIdx===-1) return;
+  const newIdx = parseInt(newPosStr);
+  if(curIdx===newIdx) return;
+  // Remove and insert at new position
+  const item = arr.splice(curIdx,1)[0];
+  arr.splice(newIdx, 0, item);
+  api('POST',`/api/route/${WEEK}`,{routeOrder,truckDates});
+  renderRoteiro();
 }
 
 // ── Item in unassigned zone (select to assign) ────────────
@@ -1248,7 +1291,9 @@ function renderEmail(){
           txt += emailShowCode ? `${pad(q)} ${ct.label} (${ct.matcode}) R$ ${fP(price)}\n` : `${pad(q)} ${ct.label} R$ ${fP(price)}\n`;
         }
       });
-      txt+=`${paymentLabel(o._days||c.days_default||'14 Dias')}\n\n`;
+      txt+=`${paymentLabel(o._days||c.days_default||'14 Dias')}\n`;
+      if(o._obs) txt+=`**${o._obs}**\n`;
+      txt+='\n';
     });
     const pid='ep'+t;
     // Generate version without material codes
@@ -1269,6 +1314,7 @@ function renderEmail(){
     out.appendChild(b);
   }
   if(!any) out.innerHTML='<div class="alert al-w">Monte o roteiro primeiro.</div>';
+  else setTimeout(styleEmailObs, 50);
 }
 function downloadWordBlock(id, filename){
   const text = document.getElementById(id)?.textContent || '';
@@ -1276,8 +1322,14 @@ function downloadWordBlock(id, filename){
     xmlns:w='urn:schemas-microsoft-com:office:word'
     xmlns='http://www.w3.org/TR/REC-html40'>
     <head><meta charset='utf-8'>
-    <style>body{font-family:"Courier New",monospace;font-size:11pt;}p{margin:0;white-space:pre-wrap;}</style>
-    </head><body>${text.split('\n').map(l=>`<p>${l.replace(/</g,'&lt;')||'&nbsp;'}</p>`).join('')}</body></html>`;
+    <style>body{font-family:"Courier New",monospace;font-size:11pt;}p{margin:0;white-space:pre-wrap;}.obs{color:#cc0000;font-weight:bold;}</style>
+    </head><body>${text.split('\n').map(l=>{
+      const esc = l.replace(/</g,'&lt;');
+      // Lines starting with ** are observations
+      if(esc.startsWith('**') && esc.endsWith('**'))
+        return `<p class="obs">${esc.slice(2,-2)||'&nbsp;'}</p>`;
+      return `<p>${esc||'&nbsp;'}</p>`;
+    }).join('')}</body></html>`;
   const blob = new Blob(['\ufeff'+wordHtml],{type:'application/msword'});
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
@@ -1309,6 +1361,19 @@ function toggleEmailCode(){
   const btn = document.getElementById('btn-toggle-code');
   if(btn) btn.textContent = emailShowCode ? 'ON' : 'OFF';
   renderEmail(); // re-render with new setting
+}
+
+function styleEmailObs(){
+  // Make **obs** lines appear red in email preview
+  document.querySelectorAll('.eb-body').forEach(pre=>{
+    if(pre.dataset.styled) return;
+    pre.dataset.styled='1';
+    pre.innerHTML = pre.textContent.split('\n').map(l=>{
+      if(l.startsWith('**') && l.endsWith('**'))
+        return `<span style="color:#cc0000;font-weight:bold">${l.slice(2,-2)}</span>`;
+      return l.replace(/</g,'&lt;');
+    }).join('\n');
+  });
 }
 
 function copyTxt(id,btn){ navigator.clipboard.writeText(document.getElementById(id).textContent).then(()=>{ btn.textContent='✓ copiado'; setTimeout(()=>btn.textContent='copiar',2000); }); }
@@ -1856,6 +1921,19 @@ async function saveExtraOrder(key){
   } else {
     await api('POST',`/api/orders/${WEEK}`,{clientId:key, qtd:o});
   }
+}
+
+function setObs(cid, val){
+  const cidInt = parseInt(cid);
+  if(!orders[cidInt]) orders[cidInt]={};
+  orders[cidInt]._obs = val.trim();
+  saveOrder(cidInt);
+}
+
+function setExtraObs(key, val){
+  if(!orders[key]) return;
+  orders[key]._obs = val.trim();
+  saveExtraOrder(key);
 }
 
 function setOrderPrice(cid, ctKey, rawVal){

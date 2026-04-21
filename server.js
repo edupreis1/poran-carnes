@@ -145,9 +145,9 @@ app.post('/api/orders/:weekLabel', requireAuth, async (req, res) => {
     const days = daysRaw 
       ? (isNaN(daysRaw) ? String(daysRaw) : daysRaw + ' Dias')
       : '14 Dias';
-    // Extract custom prices (_price_KEY fields)
+    // Extract custom prices and obs
     const prices = {};
-    Object.keys(qtd).filter(k=>k.startsWith('_price_')).forEach(k=>{ prices[k]=qtd[k]; });
+    Object.keys(qtd).filter(k=>k.startsWith('_price_') || k==='_obs').forEach(k=>{ prices[k]=qtd[k]; });
     const pricesJson = JSON.stringify(prices);
     const existing = await db.prepare('SELECT id FROM orders WHERE client_id = ? AND week_label = ?').get(String(clientId), week);
     const stmt = existing
