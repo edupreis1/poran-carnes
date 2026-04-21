@@ -548,7 +548,13 @@ function renderPedidos(){
       </div>`;
     list.appendChild(div);
     // Render extra pedidos for this client
-    const extraKeys = Object.keys(orders).filter(k=>k.startsWith(c.id+'_')&&parseInt(orders[k]._parentCid)===c.id);
+    // Extra orders: key pattern is "clientId_slotNumber" e.g. "235_2"
+    const extraKeys = Object.keys(orders).filter(k=>{
+      if(!k.includes('_')) return false;
+      const parts = k.split('_');
+      const parentId = parseInt(parts[0]);
+      return parentId === c.id && parts[1] && !isNaN(parts[1]);
+    });
     extraKeys.forEach((key,ei)=>{
       const eo = orders[key]||{};
       const eKg = CORTES.reduce((s,ct)=>s+(parseFloat(eo[ct.key])||0)*ct.kg,0);
@@ -618,9 +624,18 @@ function addExtraPedido(cid){
   const cidInt=parseInt(cid);
   let slot=2;
   while(orders[`${cidInt}_${slot}`]) slot++;
-  // Deep-empty object — no shared references
-  orders[`${cidInt}_${slot}`]={_parentCid:cidInt};
+  const newKey = `${cidInt}_${slot}`;
+  orders[newKey]={_parentCid:cidInt};
   renderPedidos();
+  // Re-open parent card and new extra card
+  requestAnimationFrame(()=>{
+    document.getElementById('cb-'+cidInt)?.classList.add('open');
+    document.getElementById('chev-'+cidInt)?.classList.add('open');
+    document.getElementById('ecb-'+newKey)?.classList.add('open');
+    document.getElementById('echev-'+newKey)?.classList.add('open');
+    // Scroll to new extra
+    document.getElementById('ecb-'+newKey)?.scrollIntoView({behavior:'smooth',block:'nearest'});
+  });
 }
 
 function removeExtraPedido(key){
@@ -761,7 +776,8 @@ function renderRoteiro(){
       </div>`;
     layout.appendChild(tz);
   }
-  // Drag delegation not needed — using inline handlers
+  // Init touch reorder for mobile
+  setTimeout(initTouchReorder, 50);
 }
 
 // ── Item inside a truck (draggable for reordering) ──────────
@@ -853,6 +869,61 @@ function diDragStart(e, el){
 function diDragEnd(e){
   document.querySelectorAll('.di.dragging,.di.drag-over').forEach(el=>{
     el.classList.remove('dragging','drag-over');
+  });
+}
+
+// ── Touch reorder within truck ────────────────────────
+let touchReorderSrc = null;
+let touchReorderClone = null;
+
+function initTouchReorder(){
+  document.querySelectorAll('.di[data-cid]').forEach(el=>{
+    el.addEventListener('touchstart', e=>{
+      touchReorderSrc = el.dataset.cid;
+      touchReorderClone = el.cloneNode(true);
+      touchReorderClone.style.cssText='position:fixed;opacity:.6;pointer-events:none;z-index:9999;width:'+el.offsetWidth+'px;background:var(--card);border:1px solid var(--accent);border-radius:5px;';
+      document.body.appendChild(touchReorderClone);
+      el.style.opacity='0.3';
+    },{passive:true});
+
+    el.addEventListener('touchmove', e=>{
+      e.preventDefault();
+      if(!touchReorderClone) return;
+      const t=e.touches[0];
+      touchReorderClone.style.left=(t.clientX-100)+'px';
+      touchReorderClone.style.top=(t.clientY-20)+'px';
+      // Highlight target
+      document.querySelectorAll('.di.drag-over').forEach(x=>x.classList.remove('drag-over'));
+      touchReorderClone.style.display='none';
+      const target=document.elementFromPoint(t.clientX,t.clientY)?.closest('.di[data-cid]');
+      touchReorderClone.style.display='';
+      if(target && target.dataset.cid !== touchReorderSrc) target.classList.add('drag-over');
+    },{passive:false});
+
+    el.addEventListener('touchend', e=>{
+      if(touchReorderClone){touchReorderClone.remove();touchReorderClone=null;}
+      document.querySelectorAll('.di').forEach(x=>{x.classList.remove('drag-over');x.style.opacity='';});
+      if(!touchReorderSrc) return;
+      const t=e.changedTouches[0];
+      const target=document.elementFromPoint(t.clientX,t.clientY)?.closest('.di[data-cid]');
+      if(!target || target.dataset.cid===touchReorderSrc){touchReorderSrc=null;return;}
+      const srcKey=touchReorderSrc, tgtKey=target.dataset.cid;
+      touchReorderSrc=null;
+      // Reorder in routeOrder
+      for(const k of Object.keys(routeOrder)){
+        const arr=routeOrder[k];
+        const si=arr.findIndex(x=>String(x)===String(srcKey));
+        const ti=arr.findIndex(x=>String(x)===String(tgtKey));
+        if(si!==-1&&ti!==-1){
+          arr.splice(si,1);
+          const newTi=arr.findIndex(x=>String(x)===String(tgtKey));
+          arr.splice(newTi,0,srcKey.includes('_')?srcKey:parseInt(srcKey));
+          api('POST',`/api/route/${WEEK}`,{routeOrder,truckDates});
+          renderRoteiro();
+          return;
+        }
+      }
+    },{passive:true});
   });
 }
 function diDragOver(e){
