@@ -1339,13 +1339,18 @@ function downloadWordBlock(id, filename){
       @page {
         margin: 1.27cm;
         size: A4;
+        mso-page-orientation: portrait;
       }
       body {
         font-family: Arial, sans-serif;
         font-size: 10pt;
         font-weight: bold;
-        margin: 0;
+        margin: 1.27cm;
         padding: 0;
+        mso-margin-top-alt: 1.27cm;
+        mso-margin-bottom-alt: 1.27cm;
+        mso-margin-left-alt: 1.27cm;
+        mso-margin-right-alt: 1.27cm;
       }
       p {
         margin: 0;
@@ -1369,7 +1374,7 @@ function downloadWordBlock(id, filename){
       if(esc.startsWith('**') && esc.endsWith('**'))
         return `<p class="obs">${esc.slice(2,-2)}</p>`;
       if(esc.startsWith('TRUCK'))
-        return `<p style="border-bottom:1px solid #000;padding-bottom:1px;margin-bottom:3px">${esc}</p>`;
+        return `<p style="margin-bottom:3px">${esc}</p>`;
       if(/^\d+ª Entrega/.test(esc))
         return `<p style="margin-top:4px">${esc}</p>`;
       return `<p>${esc}</p>`;
@@ -1394,15 +1399,15 @@ function downloadAllWord(){
     xmlns='http://www.w3.org/TR/REC-html40'>
     <head><meta charset='utf-8'>
     <style>
-      @page { margin: 1.27cm; size: A4; }
-      body { font-family: Arial, sans-serif; font-size: 10pt; font-weight: bold; margin: 0; padding: 0; }
+      @page { margin: 1.27cm; size: A4; mso-page-orientation: portrait; }
+      body { font-family: Arial, sans-serif; font-size: 10pt; font-weight: bold; margin: 1.27cm; padding: 0; mso-margin-top-alt:1.27cm; mso-margin-bottom-alt:1.27cm; }
       p { margin: 0; padding: 0; font-family: Arial, sans-serif; font-size: 10pt; font-weight: bold; line-height: 1.1; mso-margin-top-alt:0; mso-margin-bottom-alt:0; }
       .obs { color: #cc0000; font-weight: bold; }
     </style></head>
     <body>${allLines.map(l=>{
       const esc = l.replace(/</g,'&lt;').replace(/&/g,'&amp;');
       if(esc.startsWith('**') && esc.endsWith('**')) return `<p class="obs">${esc.slice(2,-2)}</p>`;
-      if(esc.startsWith('TRUCK')) return `<p style="border-bottom:1px solid #000;padding-bottom:1px;margin-bottom:3px;margin-top:8px">${esc}</p>`;
+      if(esc.startsWith('TRUCK')) return `<p style="margin-bottom:3px;margin-top:8px">${esc}</p>`;
       if(/^\d+ª Entrega/.test(esc)) return `<p style="margin-top:4px">${esc}</p>`;
       return `<p>${esc}</p>`;
     }).join('')}</body></html>`;
