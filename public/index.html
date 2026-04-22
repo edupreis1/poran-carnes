@@ -376,14 +376,14 @@ main { max-width: 720px; margin: 0 auto; padding: 20px 16px 100px; }
 // ---- CORTES ----
 let CORTES = [
   // BOI — step 0.5, unidade PC
-  {key:'boi_cas', label:'Boi Casado',                 matcode:'10001', cat:'boi',    kg:295, price:24.00, step:0.5, unit:'PC'},
+  {key:'boi_cas', label:'Boi Casado',                 matcode:'10102/10109', cat:'boi',    kg:295, price:24.00, step:0.5, unit:'PC'},
   {key:'nov_cas', label:'Novilha',                    matcode:'10003', cat:'boi',    kg:220, price:22.50, step:0.5, unit:'PC'},
   {key:'boi_ts',  label:'Traseiro Serrote Boi',       matcode:'10101', cat:'boi',    kg:75,  price:27.20, step:0.5,   unit:'PC'},
   {key:'boi_tcc', label:'Traseiro Capote de Boi',    matcode:'10109', cat:'boi',    kg:115, price:26.70, step:0.5,   unit:'PC'},
   {key:'boi_dtb', label:'Dianteiro de Boi',           matcode:'10102', cat:'boi',    kg:60,  price:22.00, step:0.5,   unit:'PC'},
   {key:'boi_pab', label:'Costela de Boi',             matcode:'10103', cat:'boi',    kg:18,  price:20.50, step:0.5,   unit:'PC'},
   // VACA — step 0.5 para casada, 1 para cortes
-  {key:'vac_cas', label:'Vaca Casada',                matcode:'10002', cat:'vaca',   kg:230, price:22.50, step:0.5, unit:'PC'},
+  {key:'vac_cas', label:'Vaca Casada',                matcode:'10191/10189', cat:'vaca',   kg:230, price:22.50, step:0.5, unit:'PC'},
   {key:'vac_ts',  label:'Traseiro Serrote Vaca',      matcode:'10190', cat:'vaca',   kg:62,  price:27.20, step:0.5,   unit:'PC'},
   {key:'vac_tcc', label:'Traseiro Capote de Vaca',   matcode:'10189', cat:'vaca',   kg:115, price:26.70, step:0.5,   unit:'PC'},
   {key:'vac_dtv', label:'Dianteiro de Vaca',          matcode:'10191', cat:'vaca',   kg:41,  price:22.00, step:0.5,   unit:'PC'},
@@ -1318,16 +1318,56 @@ function renderEmail(){
 }
 function downloadWordBlock(id, filename){
   const text = document.getElementById(id)?.textContent || '';
+  // Word-compatible HTML with narrow margins, Arial 10pt, no spacing
+  // Matches the modelo format: margins 0.5in, Arial 10pt
   const wordHtml = `<html xmlns:o='urn:schemas-microsoft-com:office:office'
     xmlns:w='urn:schemas-microsoft-com:office:word'
     xmlns='http://www.w3.org/TR/REC-html40'>
     <head><meta charset='utf-8'>
-    <style>body{font-family:"Courier New",monospace;font-size:11pt;}p{margin:0;white-space:pre-wrap;}.obs{color:#cc0000;font-weight:bold;}</style>
-    </head><body>${text.split('\n').map(l=>{
+    <xml><w:WordDocument><w:View>Print</w:View></w:WordDocument></xml>
+    <style>
+      @page { margin: 1.27cm; }
+      body {
+        font-family: Arial, sans-serif;
+        font-size: 10pt;
+        margin: 1.27cm;
+        line-height: 1.0;
+      }
+      p {
+        margin: 0;
+        padding: 0;
+        font-family: Arial, sans-serif;
+        font-size: 10pt;
+        line-height: 1.0;
+        white-space: pre-wrap;
+        mso-line-height-rule: exactly;
+        mso-margin-top-alt: auto;
+        mso-margin-bottom-alt: auto;
+      }
+      p.truck-header {
+        font-weight: bold;
+        font-size: 10pt;
+        margin-bottom: 0;
+        border-bottom: 1px solid #000;
+        padding-bottom: 2px;
+        margin-bottom: 4px;
+      }
+      p.entrega-header {
+        font-weight: bold;
+        font-size: 10pt;
+        margin-top: 6px;
+        margin-bottom: 0;
+      }
+      p.obs { color: #cc0000; font-weight: bold; font-size: 10pt; margin: 0; }
+    </style>
+    </head><body>${text.split('\n').map((l,i)=>{
       const esc = l.replace(/</g,'&lt;');
-      // Lines starting with ** are observations
       if(esc.startsWith('**') && esc.endsWith('**'))
         return `<p class="obs">${esc.slice(2,-2)||'&nbsp;'}</p>`;
+      if(esc.startsWith('TRUCK'))
+        return `<p class="truck-header">${esc}</p>`;
+      if(/^\d+ª Entrega/.test(esc))
+        return `<p class="entrega-header">${esc}</p>`;
       return `<p>${esc||'&nbsp;'}</p>`;
     }).join('')}</body></html>`;
   const blob = new Blob(['\ufeff'+wordHtml],{type:'application/msword'});
