@@ -376,14 +376,14 @@ main { max-width: 720px; margin: 0 auto; padding: 20px 16px 100px; }
 // ---- CORTES ----
 let CORTES = [
   // BOI — step 0.5, unidade PC
-  {key:'boi_cas', label:'Boi Casado',                 matcode:'10102/10109', cat:'boi',    kg:295, price:24.00, step:0.5, unit:'PC'},
+  {key:'boi_cas', label:'Boi Casado',                 matcode:'10109', cat:'boi',    kg:295, price:24.00, step:0.5, unit:'PC'},
   {key:'nov_cas', label:'Novilha',                    matcode:'10003', cat:'boi',    kg:220, price:22.50, step:0.5, unit:'PC'},
   {key:'boi_ts',  label:'Traseiro Serrote Boi',       matcode:'10101', cat:'boi',    kg:75,  price:27.20, step:0.5,   unit:'PC'},
   {key:'boi_tcc', label:'Traseiro Capote de Boi',    matcode:'10109', cat:'boi',    kg:115, price:26.70, step:0.5,   unit:'PC'},
   {key:'boi_dtb', label:'Dianteiro de Boi',           matcode:'10102', cat:'boi',    kg:60,  price:22.00, step:0.5,   unit:'PC'},
   {key:'boi_pab', label:'Costela de Boi',             matcode:'10103', cat:'boi',    kg:18,  price:20.50, step:0.5,   unit:'PC'},
   // VACA — step 0.5 para casada, 1 para cortes
-  {key:'vac_cas', label:'Vaca Casada',                matcode:'10191/10189', cat:'vaca',   kg:230, price:22.50, step:0.5, unit:'PC'},
+  {key:'vac_cas', label:'Vaca Casada',                matcode:'10189', cat:'vaca',   kg:230, price:22.50, step:0.5, unit:'PC'},
   {key:'vac_ts',  label:'Traseiro Serrote Vaca',      matcode:'10190', cat:'vaca',   kg:62,  price:27.20, step:0.5,   unit:'PC'},
   {key:'vac_tcc', label:'Traseiro Capote de Vaca',   matcode:'10189', cat:'vaca',   kg:115, price:26.70, step:0.5,   unit:'PC'},
   {key:'vac_dtv', label:'Dianteiro de Vaca',          matcode:'10191', cat:'vaca',   kg:41,  price:22.00, step:0.5,   unit:'PC'},
@@ -1282,7 +1282,8 @@ function renderEmail(){
       const c=clients.find(x=>x.id===parseInt(cid)); if(!c)return;
       const o=orders[key]||{};
       txt+=`${i+1}ª Entrega\n${c.name.toUpperCase()}`;
-      if(c.code||c.cnpj) txt+='\n'+(c.code||'')+(c.cnpj?'-CNPJ:'+c.cnpj:'');
+      // Código e CNPJ na mesma linha: "15280 - 12.345.678/0001-00"
+      if(c.code||c.cnpj) txt+='\n'+(c.code||'')+(c.cnpj?' - '+c.cnpj:'');
       txt+='\n';
       CORTES.forEach(ct => {
         const q = o[ct.key]||0;
@@ -1318,58 +1319,62 @@ function renderEmail(){
 }
 function downloadWordBlock(id, filename){
   const text = document.getElementById(id)?.textContent || '';
-  // Word-compatible HTML with narrow margins, Arial 10pt, no spacing
-  // Matches the modelo format: margins 0.5in, Arial 10pt
+  const lines = text.split('\n').filter((l,i,arr)=>{
+    // Remove consecutive blank lines — keep at most 0 blanks between entries
+    if(l.trim()==='') return false; // remove ALL blank lines for compact output
+    return true;
+  });
+  
   const wordHtml = `<html xmlns:o='urn:schemas-microsoft-com:office:office'
     xmlns:w='urn:schemas-microsoft-com:office:word'
     xmlns='http://www.w3.org/TR/REC-html40'>
     <head><meta charset='utf-8'>
-    <xml><w:WordDocument><w:View>Print</w:View></w:WordDocument></xml>
+    <xml>
+      <w:WordDocument>
+        <w:View>Print</w:View>
+        <w:Zoom>100</w:Zoom>
+      </w:WordDocument>
+    </xml>
     <style>
-      @page { margin: 1.27cm; }
+      @page {
+        margin: 1.27cm;
+        size: A4;
+      }
       body {
         font-family: Arial, sans-serif;
         font-size: 10pt;
-        margin: 1.27cm;
-        line-height: 1.0;
+        font-weight: bold;
+        margin: 0;
+        padding: 0;
       }
       p {
         margin: 0;
         padding: 0;
         font-family: Arial, sans-serif;
         font-size: 10pt;
-        line-height: 1.0;
-        white-space: pre-wrap;
+        font-weight: bold;
+        line-height: 1.1;
         mso-line-height-rule: exactly;
-        mso-margin-top-alt: auto;
-        mso-margin-bottom-alt: auto;
+        mso-margin-top-alt: 0;
+        mso-margin-bottom-alt: 0;
+        mso-space-before: 0;
+        mso-space-after: 0;
       }
-      p.truck-header {
-        font-weight: bold;
-        font-size: 10pt;
-        margin-bottom: 0;
-        border-bottom: 1px solid #000;
-        padding-bottom: 2px;
-        margin-bottom: 4px;
-      }
-      p.entrega-header {
-        font-weight: bold;
-        font-size: 10pt;
-        margin-top: 6px;
-        margin-bottom: 0;
-      }
-      p.obs { color: #cc0000; font-weight: bold; font-size: 10pt; margin: 0; }
+      .obs { color: #cc0000; font-weight: bold; }
+      .separator { border-top: 1px solid #000; margin: 2px 0; font-size: 1pt; }
     </style>
-    </head><body>${text.split('\n').map((l,i)=>{
-      const esc = l.replace(/</g,'&lt;');
+    </head>
+    <body>${lines.map((l,i)=>{
+      const esc = l.replace(/</g,'&lt;').replace(/&/g,'&amp;');
       if(esc.startsWith('**') && esc.endsWith('**'))
-        return `<p class="obs">${esc.slice(2,-2)||'&nbsp;'}</p>`;
+        return `<p class="obs">${esc.slice(2,-2)}</p>`;
       if(esc.startsWith('TRUCK'))
-        return `<p class="truck-header">${esc}</p>`;
+        return `<p style="border-bottom:1px solid #000;padding-bottom:1px;margin-bottom:3px">${esc}</p>`;
       if(/^\d+ª Entrega/.test(esc))
-        return `<p class="entrega-header">${esc}</p>`;
-      return `<p>${esc||'&nbsp;'}</p>`;
-    }).join('')}</body></html>`;
+        return `<p style="margin-top:4px">${esc}</p>`;
+      return `<p>${esc}</p>`;
+    }).join('')}
+    </body></html>`;
   const blob = new Blob(['\ufeff'+wordHtml],{type:'application/msword'});
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
@@ -1379,16 +1384,28 @@ function downloadWordBlock(id, filename){
 
 function downloadAllWord(){
   const blocks = document.querySelectorAll('.eb-body');
-  let allText = '';
-  blocks.forEach(el=>{ allText += (el.textContent||'') + '\n\n'; });
-  downloadWordBlock('__all__', 'Completo');
-  // Inline version
+  let allLines = [];
+  blocks.forEach((el,bi)=>{
+    const text = el.textContent || '';
+    text.split('\n').forEach(l=>{ if(l.trim()) allLines.push(l); });
+  });
   const wordHtml = `<html xmlns:o='urn:schemas-microsoft-com:office:office'
     xmlns:w='urn:schemas-microsoft-com:office:word'
     xmlns='http://www.w3.org/TR/REC-html40'>
     <head><meta charset='utf-8'>
-    <style>body{font-family:"Courier New",monospace;font-size:11pt;}p{margin:0;white-space:pre-wrap;}</style>
-    </head><body>${allText.split('\n').map(l=>`<p>${l.replace(/</g,'&lt;')||'&nbsp;'}</p>`).join('')}</body></html>`;
+    <style>
+      @page { margin: 1.27cm; size: A4; }
+      body { font-family: Arial, sans-serif; font-size: 10pt; font-weight: bold; margin: 0; padding: 0; }
+      p { margin: 0; padding: 0; font-family: Arial, sans-serif; font-size: 10pt; font-weight: bold; line-height: 1.1; mso-margin-top-alt:0; mso-margin-bottom-alt:0; }
+      .obs { color: #cc0000; font-weight: bold; }
+    </style></head>
+    <body>${allLines.map(l=>{
+      const esc = l.replace(/</g,'&lt;').replace(/&/g,'&amp;');
+      if(esc.startsWith('**') && esc.endsWith('**')) return `<p class="obs">${esc.slice(2,-2)}</p>`;
+      if(esc.startsWith('TRUCK')) return `<p style="border-bottom:1px solid #000;padding-bottom:1px;margin-bottom:3px;margin-top:8px">${esc}</p>`;
+      if(/^\d+ª Entrega/.test(esc)) return `<p style="margin-top:4px">${esc}</p>`;
+      return `<p>${esc}</p>`;
+    }).join('')}</body></html>`;
   const blob = new Blob(['\ufeff'+wordHtml],{type:'application/msword'});
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
