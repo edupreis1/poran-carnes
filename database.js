@@ -104,7 +104,9 @@ async function initDatabase() {
     await pool.query("ALTER TABLE orders ALTER COLUMN days TYPE TEXT USING days::TEXT");
     await pool.query("ALTER TABLE clients ADD COLUMN IF NOT EXISTS obs_default TEXT DEFAULT ''");
     // Fix days_default: convert numeric strings to label format ("14" → "14 Dias")
-    await pool.query("UPDATE clients SET days_default = days_default || ' Dias' WHERE days_default ~ '^[0-9]+$'");
+    // Fix days_default: normalize all values to label format
+    await pool.query("UPDATE clients SET days_default = regexp_replace(days_default, '[^0-9]', '', 'g') || ' Dias' WHERE days_default !~ '[A-Za-z].*[A-Za-z]'");
+    await pool.query("UPDATE clients SET days_default = '14 Dias' WHERE days_default IS NULL OR days_default = '' OR days_default = ' Dias'");
     // Fix orders.days same way
     await pool.query("UPDATE orders SET days = days || ' Dias' WHERE days ~ '^[0-9]+(\\.[0-9]+)?$'");
     // Migrate clients.days_default from INTEGER to TEXT if needed  

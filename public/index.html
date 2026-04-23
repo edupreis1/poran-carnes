@@ -1607,8 +1607,8 @@ async function renderConfig(){
         <input style="width:100%;background:var(--card);border:1px solid var(--border2);border-radius:4px;padding:7px 10px;font-size:13px;font-family:var(--mono);color:var(--text)" id="ef-email-${c.id}" value="${c.email||''}"></div>
       <div style="margin-bottom:8px"><div style="font-size:10px;color:var(--muted);margin-bottom:4px;letter-spacing:.06em">PRAZO PADRÃO (DIAS)</div>
         <select style="width:100%;background:var(--card);border:1px solid var(--border2);border-radius:4px;padding:7px 10px;font-size:13px;font-family:var(--sans);color:var(--text)" id="ef-days-${c.id}">
-          ${[7,8,9,10,11,12,14,15,16,18,21,25,28,30,38].map(d=>`<option value="${d}"${(c.days_default||14)==d?' selected':''}>${d} dias</option>`).join('')}
-        </select></div>
+            ${paymentOptions(c.days_default||'14 Dias')}
+          </select></div>
       <div style="margin-bottom:10px"><div style="font-size:10px;color:var(--muted);margin-bottom:4px;letter-spacing:.06em">FORNECEDOR</div>
         <select style="width:100%;background:var(--card);border:1px solid var(--border2);border-radius:4px;padding:7px 10px;font-size:13px;font-family:var(--sans);color:var(--text)" id="ef-sup-${c.id}">
           <option value="">— sem fornecedor —</option>
@@ -1924,7 +1924,7 @@ async function cfgAddClient(){
     name,
     code:document.getElementById('cfg-nc')?.value.trim()||'',
     cnpj:document.getElementById('cfg-cnpj')?.value.trim()||'',
-    days_default:parseInt(document.getElementById('cfg-nd')?.value)||14,
+    days_default:document.getElementById('cfg-nd')?.value||'14 Dias',
     price_table:document.getElementById('cfg-ntab')?.value||''
   });
   if(!c||!c.id){alert('Erro ao criar cliente.');return;}
@@ -1954,7 +1954,7 @@ function renderConfigClients(){
           ${c.code?`<span style="font-family:var(--mono);font-size:10px;color:var(--muted2);margin-left:6px">${c.code}</span>`:''}
           ${c.price_table?`<span style="font-size:10px;background:#e8f0fe;color:#1a56db;padding:1px 6px;border-radius:3px;margin-left:4px">Tabela ${c.price_table}</span>`:''}
         </div>
-        <div style="font-size:11px;color:var(--muted);font-family:var(--mono)">${c.cnpj||'—'} · ${c.days_default||14}d</div>
+        <div style="font-size:11px;color:var(--muted);font-family:var(--mono)">${c.cnpj||'—'} · ${paymentLabel(c.days_default||'14 Dias')}</div>
       </div>
       <button class="mgr-btn" onclick="toggleEdit(${c.id})">editar</button>
       <button class="mgr-btn" onclick="deleteClient(${c.id})" style="color:var(--accent)">excluir</button>
@@ -2214,7 +2214,7 @@ async function addClient(){
     alert(`Já existe um cliente com o código ${code}!\nVerifique antes de continuar.`);
     return;
   }
-  const days_default=parseInt(document.getElementById('nd')?.value)||14;
+  const days_default=document.getElementById('nd')?.value||'14 Dias';
   const nc=await api('POST','/api/clients',{
     name,
     code:document.getElementById('nc').value.trim(),
@@ -2241,7 +2241,7 @@ async function saveEditC(id){
   c.name=document.getElementById('ef-name-'+id)?.value.trim()||c.name;
   c.code=document.getElementById('ef-code-'+id)?.value.trim()||'';
   c.cnpj=document.getElementById('ef-cnpj-'+id)?.value.trim()||'';
-  c.days_default=parseInt(document.getElementById('ef-days-'+id)?.value)||14;
+  c.days_default=document.getElementById('ef-days-'+id)?.value||'14 Dias';
   c.price_table=document.getElementById('ef-tab-'+id)?.value||'';
   document.getElementById('ep-'+id).style.display='none';
   await api('PUT',`/api/clients/${id}`,{name:c.name,code:c.code,cnpj:c.cnpj,email:c.email||'',days_default:c.days_default,price_table:c.price_table});
