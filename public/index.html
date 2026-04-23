@@ -555,9 +555,9 @@ function renderPedidos(){
             id="obs-${c.id}"
             placeholder="Observação (aparece no e-mail em vermelho)..."
             rows="2"
-            style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:5px;padding:8px 10px;font-size:12px;font-family:var(--sans);color:var(--text);resize:vertical"
+            style="width:100%;background:var(--surface);border:1px solid #e87070;border-radius:5px;padding:8px 10px;font-size:12px;font-family:var(--sans);color:#cc0000;font-weight:600;resize:vertical"
             onblur="setObs(${c.id},this.value)"
-          >${o._obs||''}</textarea>
+          >${o._obs||c.obs_default||''}</textarea>
         </div>
       </div>`;
     list.appendChild(div);
@@ -585,12 +585,22 @@ function renderPedidos(){
               <div class="cr-info"><div class="cr-name">${ct.label}</div>
                 <div class="cr-sub">${ct.kg}kg · R$${fP(getCortePrice(ct,c.price_table||''))}</div>
               </div>
-              <div class="qw"><input class="qty-inp${(parseFloat(eo[ct.key])||0)===0?' z':''}" type="text"
-                inputmode="decimal" id="eq-${key}-${ct.key}" value="${eo[ct.key]||''}"
-                placeholder="${ct.step===0.5?'0.5':'0'}"
-                onblur="setExtraQty('${key}','${ct.key}',this.value)"
-                onkeydown="if(event.key==='Enter'){this.blur()}"
-                oninput="this.value=this.value.replace(/[^0-9.,]/g,'').replace(',','.')"></div>
+              <div style="display:flex;flex-direction:column;align-items:center;gap:3px">
+                <input class="qty-inp${(parseFloat(eo[ct.key])||0)===0?' z':''}" type="text"
+                  inputmode="decimal" id="eq-${key}-${ct.key}" value="${eo[ct.key]||''}"
+                  placeholder="0"
+                  onblur="setExtraQty('${key}','${ct.key}',this.value)"
+                  onkeydown="if(event.key==='Enter'){this.blur()}"
+                  oninput="this.value=this.value.replace(/[^0-9.,]/g,'').replace(',','.')">
+                <input class="price-inp" type="text" inputmode="decimal"
+                  id="ep-${key}-${ct.key}"
+                  value="${eo['_price_'+ct.key]||''}"
+                  placeholder="R$${fP(ct.price)}"
+                  title="Editar preço"
+                  onblur="setExtraPriceField('${key}','${ct.key}',this.value)"
+                  onkeydown="if(event.key==='Enter'){this.blur()}"
+                  oninput="this.value=this.value.replace(/[^0-9.,]/g,'').replace(',','.')">
+              </div>
             </div>`).join('')}
           </div></div>`;
       }).join('');
@@ -616,9 +626,9 @@ function renderPedidos(){
               id="obs-${key}"
               placeholder="Observação (aparece no e-mail em vermelho)..."
               rows="2"
-              style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:5px;padding:8px 10px;font-size:12px;font-family:var(--sans);color:var(--text);resize:vertical"
+              style="width:100%;background:var(--surface);border:1px solid #e87070;border-radius:5px;padding:8px 10px;font-size:12px;font-family:var(--sans);color:#cc0000;font-weight:600;resize:vertical"
               onblur="setExtraObs('${key}',this.value)"
-            >${eo._obs||''}</textarea>
+            >${eo._obs||c.obs_default||''}</textarea>
           </div>
         </div>`;
       list.appendChild(eDiv);
@@ -1285,7 +1295,16 @@ function renderEmail(){
       // Código e CNPJ na mesma linha: "15280 - 12.345.678/0001-00"
       if(c.code||c.cnpj) txt+='\n'+(c.code||'')+(c.cnpj?' - '+c.cnpj:'');
       txt+='\n';
-      CORTES.forEach(ct => {
+      // Priority: Boi Casado, Novilha, Vaca Casada first
+      const PRIO = ['boi_cas','nov_cas','vac_cas'];
+      const emailCortes = [...CORTES].sort((a,b)=>{
+        const ai=PRIO.indexOf(a.key), bi=PRIO.indexOf(b.key);
+        if(ai>=0&&bi>=0) return ai-bi;
+        if(ai>=0) return -1;
+        if(bi>=0) return 1;
+        return 0;
+      });
+      emailCortes.forEach(ct => {
         const q = o[ct.key]||0;
         if(q) {
           const price = o['_price_'+ct.key] ?? ct.price;
@@ -1305,10 +1324,10 @@ function renderEmail(){
       <div style="display:flex;gap:6px;flex-wrap:wrap">
         <span style="font-size:10px;color:var(--muted);font-family:var(--mono);align-self:center">c/ código:</span>
         <button class="btn btn-s btn-sm" onclick="copyTxt('${pid}',this)">copiar</button>
-        <button class="btn btn-s btn-sm" onclick="downloadWordBlock('${pid}','Truck_0${t}')" title="Baixar em Word">⬇</button>
+        <button class="btn btn-s btn-sm" onclick="generateDocx([${t}],'Roteiro_Truck_0${t}_${WEEK}')" title="Baixar em Word">⬇</button>
         <span style="font-size:10px;color:var(--muted);font-family:var(--mono);align-self:center;margin-left:6px">s/ código:</span>
         <button class="btn btn-s btn-sm" onclick="copyTxt('${pidNoCode}',this)">copiar</button>
-        <button class="btn btn-s btn-sm" onclick="downloadWordBlock('${pidNoCode}','Truck_0${t}_semcod')" title="Baixar em Word">⬇</button>
+        <button class="btn btn-s btn-sm" onclick="generateDocxNoCode([${t}],'Roteiro_Truck_0${t}_semcod')" title="Baixar sem código">⬇</button>
       </div></div>
       <pre class="eb-body" id="${pid}">${txt.trim()}</pre>
       <pre class="eb-body" id="${pidNoCode}" style="display:none">${txtNoCode.trim()}</pre>`;
@@ -1423,6 +1442,94 @@ function toggleEmailCode(){
   const btn = document.getElementById('btn-toggle-code');
   if(btn) btn.textContent = emailShowCode ? 'ON' : 'OFF';
   renderEmail(); // re-render with new setting
+}
+
+async function generateDocxNoCode(truckNums, filename){
+  // Same as generateDocx but uses the no-code version of text
+  const trucks = [];
+  for(const t of truckNums){
+    const pid = 'ep'+t+'nc';
+    const el = document.getElementById(pid);
+    if(!el) continue;
+    const text = el.textContent || '';
+    const lines = text.split('\n').filter(l=>l.trim());
+    let currentEntry = null;
+    const entries = [];
+    let truckTitle = '';
+    lines.forEach(l=>{
+      if(l.startsWith('TRUCK')){ truckTitle = l; return; }
+      const em = l.match(/^(\d+)ª Entrega/);
+      if(em){ if(currentEntry) entries.push(currentEntry); currentEntry={clientName:'',codeAndCnpj:'',items:[],days:'',obs:''}; return; }
+      if(!currentEntry) return;
+      if(!currentEntry.clientName){ currentEntry.clientName=l; return; }
+      if(!currentEntry.codeAndCnpj&&/^\d/.test(l)&&l.includes('-')){ currentEntry.codeAndCnpj=l; return; }
+      if(l.startsWith('**')&&l.endsWith('**')){ currentEntry.obs=l.slice(2,-2); return; }
+      if(PAYMENT_CONDITIONS.some(p=>l.startsWith(p.label))||/^\d+ Dias/.test(l)){ currentEntry.days=l; return; }
+      currentEntry.items.push(l);
+    });
+    if(currentEntry) entries.push(currentEntry);
+    if(entries.length) trucks.push({title:truckTitle, entries});
+  }
+  try {
+    const res = await fetch('/api/generate-docx',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({trucks})});
+    if(!res.ok) throw new Error(await res.text());
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href=url; a.download=filename+'.docx'; a.click();
+    URL.revokeObjectURL(url);
+  } catch(e){ alert('Erro: '+e.message); }
+}
+
+async function generateDocx(truckNums, filename){
+  // Build data structure from current email content
+  const trucks = [];
+  for(const t of truckNums){
+    const pid = 'ep'+t;
+    const el = document.getElementById(pid);
+    if(!el) continue;
+    const text = el.textContent || '';
+    const lines = text.split('\n').filter(l=>l.trim());
+    
+    // Parse truck data
+    let currentEntry = null;
+    const entries = [];
+    let truckTitle = '';
+    
+    lines.forEach(l=>{
+      if(l.startsWith('TRUCK')){ truckTitle = l; return; }
+      const entregaMatch = l.match(/^(\d+)ª Entrega/);
+      if(entregaMatch){
+        if(currentEntry) entries.push(currentEntry);
+        currentEntry = {clientName:'',codeAndCnpj:'',items:[],days:'',obs:''};
+        return;
+      }
+      if(!currentEntry) return;
+      if(!currentEntry.clientName){ currentEntry.clientName = l; return; }
+      if(!currentEntry.codeAndCnpj && /^\d/.test(l) && l.includes('-')){ currentEntry.codeAndCnpj = l; return; }
+      if(l.startsWith('**') && l.endsWith('**')){ currentEntry.obs = l.slice(2,-2); return; }
+      if(PAYMENT_CONDITIONS.some(p=>l.startsWith(p.label)) || /^\d+ Dias/.test(l)){ currentEntry.days = l; return; }
+      currentEntry.items.push(l);
+    });
+    if(currentEntry) entries.push(currentEntry);
+    if(entries.length) trucks.push({title: truckTitle, entries});
+  }
+  
+  try {
+    const res = await fetch('/api/generate-docx', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({trucks})
+    });
+    if(!res.ok) throw new Error(await res.text());
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href=url; a.download=filename+'.docx'; a.click();
+    URL.revokeObjectURL(url);
+  } catch(e){
+    alert('Erro ao gerar Word: '+e.message);
+  }
 }
 
 function styleEmailObs(){
@@ -1985,11 +2092,30 @@ async function saveExtraOrder(key){
   }
 }
 
-function setObs(cid, val){
+async function setObs(cid, val){
   const cidInt = parseInt(cid);
   if(!orders[cidInt]) orders[cidInt]={};
   orders[cidInt]._obs = val.trim();
+  // Also save as client default obs
+  const c = clients.find(x=>x.id===cidInt);
+  if(c) {
+    c.obs_default = val.trim();
+    await api('PUT',`/api/clients/${cidInt}`,{
+      name:c.name, code:c.code||'', cnpj:c.cnpj||'',
+      email:c.email||'', days_default:c.days_default||'14 Dias',
+      price_table:c.price_table||'', obs_default:val.trim()
+    });
+  }
   saveOrder(cidInt);
+}
+
+function setExtraPriceField(key, ctKey, rawVal){
+  if(!orders[key]) return;
+  const cleaned = String(rawVal).trim().replace(',','.');
+  const val = parseFloat(cleaned);
+  if(!isNaN(val) && val > 0) orders[key]['_price_'+ctKey] = val;
+  else delete orders[key]['_price_'+ctKey];
+  saveExtraOrder(key);
 }
 
 function setExtraObs(key, val){

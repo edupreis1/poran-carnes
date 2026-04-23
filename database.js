@@ -49,7 +49,7 @@ async function initDatabase() {
   await pool.query(`CREATE TABLE IF NOT EXISTS clients (
     id SERIAL PRIMARY KEY, code TEXT DEFAULT '', name TEXT NOT NULL,
     cnpj TEXT DEFAULT '', email TEXT DEFAULT '',
-    days_default INTEGER DEFAULT 14, price_table TEXT DEFAULT '',
+    days_default TEXT DEFAULT '14 Dias', price_table TEXT DEFAULT '', obs_default TEXT DEFAULT '',
     created_at TIMESTAMP DEFAULT NOW())`);
 
   await pool.query(`CREATE TABLE IF NOT EXISTS orders (
@@ -102,6 +102,7 @@ async function initDatabase() {
     await pool.query("ALTER TABLE orders ADD COLUMN IF NOT EXISTS musculo REAL DEFAULT 0");
     // Migrate days from REAL to TEXT if needed
     await pool.query("ALTER TABLE orders ALTER COLUMN days TYPE TEXT USING days::TEXT");
+    await pool.query("ALTER TABLE clients ADD COLUMN IF NOT EXISTS obs_default TEXT DEFAULT ''");
     // Migrate clients.days_default from INTEGER to TEXT if needed  
     await pool.query("ALTER TABLE clients ALTER COLUMN days_default TYPE TEXT USING days_default::TEXT");
   } catch(e) { /* columns may already exist or already TEXT */ }

@@ -98,7 +98,7 @@ app.post('/api/clients', requireAuth, async (req, res) => {
 app.put('/api/clients/:id', requireAuth, async (req, res) => {
   try {
     const { name, code, cnpj, email, days_default, price_table } = req.body;
-    await db.prepare('UPDATE clients SET name=?,code=?,cnpj=?,email=?,days_default=?,price_table=? WHERE id=?').run(name, code||'', cnpj||'', email||'', days_default||14, price_table||'', req.params.id);
+    await db.prepare('UPDATE clients SET name=?,code=?,cnpj=?,email=?,days_default=?,price_table=?,obs_default=? WHERE id=?').run(name, code||'', cnpj||'', email||'', days_default||'14 Dias', price_table||'', obs_default||'', req.params.id);
     res.json({ ok: true });
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
@@ -237,12 +237,172 @@ app.post('/api/price-table/:table', requireAuth, async (req, res) => {
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
+// ---- DOCX GENERATION ----
+app.post('/api/generate-docx', requireAuth, async (req, res) => {
+  try {
+    const { trucks } = req.body; // array of {title, entries: [{header, lines, obs}]}
+    const { Document, Packer, Paragraph, TextRun, AlignmentType } = require('docx');
+
+    const FONT = 'Arial';
+    const SIZE = 20; // 10pt in half-points
+    const BOLD_RUN = (text, color) => new TextRun({
+      text, font: FONT, size: SIZE, bold: true,
+      color: color || '000000'
+    });
+
+    const allChildren = [];
+
+    trucks.forEach((truck, ti) => {
+      // Truck header
+      allChildren.push(new Paragraph({
+        children: [BOLD_RUN(truck.title)],
+        spacing: { before: ti === 0 ? 0 : 120, after: 0 },
+      }));
+
+      truck.entries.forEach((entry, ei) => {
+        // Entrega number
+        allChildren.push(new Paragraph({
+          children: [BOLD_RUN(`${ei+1}ª Entrega`)],
+          spacing: { before: 80, after: 0 },
+        }));
+        // Client name
+        allChildren.push(new Paragraph({
+          children: [BOLD_RUN(entry.clientName)],
+          spacing: { before: 0, after: 0 },
+        }));
+        // Code - CNPJ
+        if(entry.codeAndCnpj) allChildren.push(new Paragraph({
+          children: [BOLD_RUN(entry.codeAndCnpj)],
+          spacing: { before: 0, after: 0 },
+        }));
+        // Items
+        entry.items.forEach(item => {
+          allChildren.push(new Paragraph({
+            children: [BOLD_RUN(item)],
+            spacing: { before: 0, after: 0 },
+          }));
+        });
+        // Payment
+        allChildren.push(new Paragraph({
+          children: [BOLD_RUN(entry.days)],
+          spacing: { before: 0, after: 0 },
+        }));
+        // Obs in red
+        if(entry.obs) allChildren.push(new Paragraph({
+          children: [BOLD_RUN(entry.obs, 'CC0000')],
+          spacing: { before: 0, after: 0 },
+        }));
+      });
+    });
+
+    const doc = new Document({
+      sections: [{
+        properties: {
+          page: {
+            size: { width: 11906, height: 16838 }, // A4
+            margin: { top: 720, right: 720, bottom: 720, left: 720 } // 1.27cm = ~720 DXA
+          }
+        },
+        children: allChildren
+      }]
+    });
+
+    const buffer = await Packer.toBuffer(doc);
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+    res.setHeader('Content-Disposition', 'attachment; filename="Roteiro.docx"');
+    res.send(buffer);
+  } catch(e) {
+    console.error('DOCX error:', e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // ---- DEBUG ----
 app.get('/api/debug/orders', requireAuth, async (req, res) => {
   try {
     const rows = await db.prepare('SELECT client_id, week_label, boi_cas, nov_cas, days FROM orders ORDER BY created_at DESC LIMIT 20').all();
     res.json({ count: rows.length, rows, week_now: new Date().toISOString() });
   } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// ---- DOCX GENERATION ----
+app.post('/api/generate-docx', requireAuth, async (req, res) => {
+  try {
+    const { trucks } = req.body; // array of {title, entries: [{header, lines, obs}]}
+    const { Document, Packer, Paragraph, TextRun, AlignmentType } = require('docx');
+
+    const FONT = 'Arial';
+    const SIZE = 20; // 10pt in half-points
+    const BOLD_RUN = (text, color) => new TextRun({
+      text, font: FONT, size: SIZE, bold: true,
+      color: color || '000000'
+    });
+
+    const allChildren = [];
+
+    trucks.forEach((truck, ti) => {
+      // Truck header
+      allChildren.push(new Paragraph({
+        children: [BOLD_RUN(truck.title)],
+        spacing: { before: ti === 0 ? 0 : 120, after: 0 },
+      }));
+
+      truck.entries.forEach((entry, ei) => {
+        // Entrega number
+        allChildren.push(new Paragraph({
+          children: [BOLD_RUN(`${ei+1}ª Entrega`)],
+          spacing: { before: 80, after: 0 },
+        }));
+        // Client name
+        allChildren.push(new Paragraph({
+          children: [BOLD_RUN(entry.clientName)],
+          spacing: { before: 0, after: 0 },
+        }));
+        // Code - CNPJ
+        if(entry.codeAndCnpj) allChildren.push(new Paragraph({
+          children: [BOLD_RUN(entry.codeAndCnpj)],
+          spacing: { before: 0, after: 0 },
+        }));
+        // Items
+        entry.items.forEach(item => {
+          allChildren.push(new Paragraph({
+            children: [BOLD_RUN(item)],
+            spacing: { before: 0, after: 0 },
+          }));
+        });
+        // Payment
+        allChildren.push(new Paragraph({
+          children: [BOLD_RUN(entry.days)],
+          spacing: { before: 0, after: 0 },
+        }));
+        // Obs in red
+        if(entry.obs) allChildren.push(new Paragraph({
+          children: [BOLD_RUN(entry.obs, 'CC0000')],
+          spacing: { before: 0, after: 0 },
+        }));
+      });
+    });
+
+    const doc = new Document({
+      sections: [{
+        properties: {
+          page: {
+            size: { width: 11906, height: 16838 }, // A4
+            margin: { top: 720, right: 720, bottom: 720, left: 720 } // 1.27cm = ~720 DXA
+          }
+        },
+        children: allChildren
+      }]
+    });
+
+    const buffer = await Packer.toBuffer(doc);
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+    res.setHeader('Content-Disposition', 'attachment; filename="Roteiro.docx"');
+    res.send(buffer);
+  } catch(e) {
+    console.error('DOCX error:', e);
+    res.status(500).json({ error: e.message });
+  }
 });
 
 // ---- DEBUG ----
