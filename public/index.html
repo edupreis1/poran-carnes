@@ -1740,6 +1740,11 @@ async function flushSave(){
 async function saveOrder(cid){
   const cidInt=parseInt(cid);
   const o=orders[cidInt]||{};
+  // If _days not set by user, use client's days_default
+  if(!o._days){
+    const c = clients.find(x=>x.id===cidInt);
+    if(c && c.days_default) o._days = c.days_default;
+  }
   const hasAny=CORTES.some(ct=>(parseFloat(o[ct.key])||0)>0);
   const ind = document.getElementById('save-indicator');
   if(ind) ind.textContent = 'salvando...';
@@ -2110,6 +2115,12 @@ async function setExtraDays(key,v){
 
 async function saveExtraOrder(key){
   const o=orders[key]||{};
+  // If _days not set, use parent client's days_default
+  if(!o._days){
+    const parentCid = parseInt(String(key).split('_')[0]);
+    const c = clients.find(x=>x.id===parentCid);
+    if(c && c.days_default) o._days = c.days_default;
+  }
   const hasAny=CORTES.some(ct=>(parseFloat(o[ct.key])||0)>0);
   if(!hasAny){
     await api('DELETE',`/api/orders/${WEEK}/${key}`);

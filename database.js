@@ -107,6 +107,17 @@ async function initDatabase() {
     // Fix days_default: normalize all values to label format
     await pool.query("UPDATE clients SET days_default = regexp_replace(days_default, '[^0-9]', '', 'g') || ' Dias' WHERE days_default !~ '[A-Za-z].*[A-Za-z]'");
     await pool.query("UPDATE clients SET days_default = '14 Dias' WHERE days_default IS NULL OR days_default = '' OR days_default = ' Dias'");
+    // Fix orders: where days='14 Dias' but client has different days_default,
+    // update orders to match client's actual default (only if not user-overridden)
+    await pool.query(\`
+      UPDATE orders o SET days = c.days_default 
+      FROM clients c 
+      WHERE o.client_id = c.id::text 
+        AND (o.days = '14 Dias' OR o.days = '14' OR o.days IS NULL)
+        AND c.days_default IS NOT NULL 
+        AND c.days_default != '14 Dias'
+        AND c.days_default != ''
+    \`).catch(()=>{}); // ignore if fails
     // Fix orders.days same way
     await pool.query("UPDATE orders SET days = days || ' Dias' WHERE days ~ '^[0-9]+(\\.[0-9]+)?$'");
     // Migrate clients.days_default from INTEGER to TEXT if needed  
