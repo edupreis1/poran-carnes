@@ -80,7 +80,13 @@ app.post('/api/change-password', requireAuth, async (req, res) => {
 app.get('/api/clients', requireAuth, async (req, res) => {
   try {
     const clients = await db.prepare('SELECT * FROM clients ORDER BY id').all();
-    res.json(clients);
+    // Normalize days_default: "14" → "14 Dias"
+  clients.forEach(c => {
+    if(c.days_default && !isNaN(String(c.days_default).trim())) {
+      c.days_default = String(c.days_default).trim() + ' Dias';
+    }
+  });
+  res.json(clients);
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 

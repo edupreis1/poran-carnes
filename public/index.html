@@ -1533,14 +1533,32 @@ async function generateDocx(truckNums, filename){
 }
 
 function styleEmailObs(){
-  // Make **obs** lines appear red in email preview
   document.querySelectorAll('.eb-body').forEach(pre=>{
     if(pre.dataset.styled) return;
     pre.dataset.styled='1';
+    let inObs = false;
     pre.innerHTML = pre.textContent.split('\n').map(l=>{
-      if(l.startsWith('**') && l.endsWith('**'))
-        return `<span style="color:#cc0000;font-weight:bold">${l.slice(2,-2)}</span>`;
-      return l.replace(/</g,'&lt;');
+      const esc = l.replace(/&/g,'&amp;').replace(/</g,'&lt;');
+      // Start of obs block
+      if(l.startsWith('**') && !inObs){
+        inObs = true;
+        const content = l.endsWith('**') && l.length > 4
+          ? l.slice(2,-2) // single line obs
+          : l.slice(2);   // multiline start
+        if(l.endsWith('**') && l.length > 4) inObs = false; // single line
+        return `<span style="color:#cc0000;font-weight:bold">${content.replace(/</g,'&lt;')}</span>`;
+      }
+      // End of obs block
+      if(inObs && l.endsWith('**')){
+        inObs = false;
+        const content = l.slice(0,-2);
+        return `<span style="color:#cc0000;font-weight:bold">${content.replace(/</g,'&lt;')}</span>`;
+      }
+      // Inside obs block
+      if(inObs){
+        return `<span style="color:#cc0000;font-weight:bold">${esc}</span>`;
+      }
+      return esc;
     }).join('\n');
   });
 }
@@ -1831,17 +1849,25 @@ async function savePaymentConditions(){
 }
 
 function paymentLabel(val){
-  // val can be a label string or days number
-  const found = PAYMENT_CONDITIONS.find(p=>p.label===String(val));
+  if(!val) return '14 Dias';
+  const s = String(val).trim();
+  // Direct match in payment conditions
+  const found = PAYMENT_CONDITIONS.find(p=>p.label===s);
   if(found) return found.label;
-  // Legacy: if it's a number, show as "X Dias"
-  if(!isNaN(val)) return `${val} Dias`;
-  return String(val);
+  // Pure number → "X Dias"
+  if(!isNaN(s) && s !== '') return `${s} Dias`;
+  // Number with .0 → "X Dias"
+  const numMatch = s.match(/^(\d+)(?:\.\d+)?$/);
+  if(numMatch) return `${numMatch[1]} Dias`;
+  // Already formatted
+  return s;
 }
 
 function paymentOptions(currentVal){
+  // Normalize currentVal to label format
+  const normVal = paymentLabel(currentVal || '14 Dias');
   return PAYMENT_CONDITIONS.map(p=>
-    `<option value="${p.label}" ${currentVal===p.label?'selected':''}>${p.label}</option>`
+    `<option value="${p.label}" ${p.label===normVal?'selected':''}>${p.label}</option>`
   ).join('');
 }
 
