@@ -252,8 +252,11 @@ app.post('/api/generate-docx', requireAuth, async (req, res) => {
     const FONT = 'Arial';
     const SIZE = 20; // 10pt in half-points
     const BOLD_RUN = (text, color) => new TextRun({
-      text, font: FONT, size: SIZE, bold: true,
+      text, font: FONT, size: SIZE, bold: false,
       color: color || '000000'
+    });
+    const OBS_RUN = (text) => new TextRun({
+      text, font: FONT, size: SIZE, bold: false, color: 'CC0000'
     });
 
     const allChildren = [];
@@ -266,10 +269,10 @@ app.post('/api/generate-docx', requireAuth, async (req, res) => {
       }));
 
       truck.entries.forEach((entry, ei) => {
-        // Entrega number
+        // Entrega number — space before each one
         allChildren.push(new Paragraph({
           children: [BOLD_RUN(`${ei+1}ª Entrega`)],
-          spacing: { before: 80, after: 0 },
+          spacing: { before: ei===0 ? 80 : 200, after: 0 },
         }));
         // Client name
         allChildren.push(new Paragraph({
@@ -295,7 +298,7 @@ app.post('/api/generate-docx', requireAuth, async (req, res) => {
         }));
         // Obs in red
         if(entry.obs) allChildren.push(new Paragraph({
-          children: [BOLD_RUN(entry.obs, 'CC0000')],
+          children: [OBS_RUN(entry.obs)],
           spacing: { before: 0, after: 0 },
         }));
       });
@@ -340,8 +343,11 @@ app.post('/api/generate-docx', requireAuth, async (req, res) => {
     const FONT = 'Arial';
     const SIZE = 20; // 10pt in half-points
     const BOLD_RUN = (text, color) => new TextRun({
-      text, font: FONT, size: SIZE, bold: true,
+      text, font: FONT, size: SIZE, bold: false,
       color: color || '000000'
+    });
+    const OBS_RUN = (text) => new TextRun({
+      text, font: FONT, size: SIZE, bold: false, color: 'CC0000'
     });
 
     const allChildren = [];
@@ -354,10 +360,10 @@ app.post('/api/generate-docx', requireAuth, async (req, res) => {
       }));
 
       truck.entries.forEach((entry, ei) => {
-        // Entrega number
+        // Entrega number — space before each one
         allChildren.push(new Paragraph({
           children: [BOLD_RUN(`${ei+1}ª Entrega`)],
-          spacing: { before: 80, after: 0 },
+          spacing: { before: ei===0 ? 80 : 200, after: 0 },
         }));
         // Client name
         allChildren.push(new Paragraph({
@@ -383,7 +389,7 @@ app.post('/api/generate-docx', requireAuth, async (req, res) => {
         }));
         // Obs in red
         if(entry.obs) allChildren.push(new Paragraph({
-          children: [BOLD_RUN(entry.obs, 'CC0000')],
+          children: [OBS_RUN(entry.obs)],
           spacing: { before: 0, after: 0 },
         }));
       });
