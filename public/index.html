@@ -1268,6 +1268,19 @@ function loadLeaflet() {
 }
 
 // ---- EMAIL ----
+function truckName(t){
+  return truckLabels['t'+t] || ('TRUCK 0'+t);
+}
+
+function setTruckLabel(t, val){
+  const v = (val||'').trim();
+  if(v) truckLabels['t'+t] = v.toUpperCase();
+  else delete truckLabels['t'+t];
+  api('POST',`/api/route/${WEEK}`, {routeOrder, truckDates, truckLabels});
+  // Update truck header display
+  renderRoteiro();
+}
+
 function renderEmail(){
   syncRoute(); ensureRoute();
   const out=document.getElementById('email-out');
