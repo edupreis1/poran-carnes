@@ -3,7 +3,9 @@ const bcrypt = require('bcryptjs');
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: process.env.DATABASE_URL ? { rejectUnauthorized: false } : false
+  ssl: process.env.DATABASE_URL ? { rejectUnauthorized: false } : false,
+  connectionTimeoutMillis: 10000,
+  idleTimeoutMillis: 30000,
 });
 
 function toPostgres(sql) {
@@ -28,7 +30,6 @@ const db = {
         const params = (p.length===1 && Array.isArray(p[0])) ? p[0] : p;
         let pgSql = toPostgres(sql);
         const isInsert = pgSql.trim().toUpperCase().startsWith('INSERT');
-        // Only add RETURNING id for tables that have an id column (not settings)
         const noIdTables = ['settings'];
         const hasNoId = noIdTables.some(t => pgSql.toLowerCase().includes('into '+t));
         if(isInsert && !pgSql.toUpperCase().includes('RETURNING') && !hasNoId) {
@@ -42,19 +43,20 @@ const db = {
   async exec(sql) { await pool.query(sql); }
 };
 
-async function initDatabase(retries = 10, delay = 3000) {
-  for(let attempt = 1; attempt <= retries; attempt++){
+async function initDatabase() {
+  // Retry logic — tries up to 10 times with 3s delay
+  for(let attempt = 1; attempt <= 10; attempt++) {
     try {
-      return await _initDatabase();
+      await pool.query('SELECT 1'); // test connection
+      console.log(`DB connected on attempt ${attempt}`);
+      break;
     } catch(e) {
-      console.error(`DB connection attempt ${attempt}/${retries} failed:`, e.message);
-      if(attempt === retries) throw e;
-      await new Promise(r => setTimeout(r, delay));
+      console.error(`DB attempt ${attempt}/10 failed: ${e.message}`);
+      if(attempt === 10) throw e;
+      await new Promise(r => setTimeout(r, 3000));
     }
   }
-}
 
-async function _initDatabase() {
   await pool.query(`CREATE TABLE IF NOT EXISTS users (
     id SERIAL PRIMARY KEY, username TEXT UNIQUE NOT NULL, password TEXT NOT NULL)`);
 
@@ -72,11 +74,13 @@ async function _initDatabase() {
     vac_dtv REAL DEFAULT 0, vac_pav REAL DEFAULT 0,
     fig REAL DEFAULT 0, rab REAL DEFAULT 0, buc REAL DEFAULT 0, cor REAL DEFAULT 0,
     cup REAL DEFAULT 0, san REAL DEFAULT 0, lom REAL DEFAULT 0, dia REAL DEFAULT 0, ind REAL DEFAULT 0,
+    lingua REAL DEFAULT 0,
     cfile REAL DEFAULT 0, alcatra REAL DEFAULT 0, maminha REAL DEFAULT 0,
     filet45 REAL DEFAULT 0, filetbc REAL DEFAULT 0,
     coxmole REAL DEFAULT 0, coxduro REAL DEFAULT 0, patinho REAL DEFAULT 0, lagarto REAL DEFAULT 0,
     capafile REAL DEFAULT 0, musculo REAL DEFAULT 0,
-    days TEXT DEFAULT '14 Dias', prices_json TEXT DEFAULT '{}', created_at TIMESTAMP DEFAULT NOW())`);
+    days TEXT DEFAULT '14 Dias', prices_json TEXT DEFAULT '{}',
+    created_at TIMESTAMP DEFAULT NOW())`);
 
   await pool.query(`CREATE TABLE IF NOT EXISTS routes (
     id SERIAL PRIMARY KEY, week_label TEXT NOT NULL,
@@ -101,53 +105,25 @@ async function _initDatabase() {
     for(const [code,name,cnpj,days] of CLIENT_DATA) {
       await pool.query(
         'INSERT INTO clients (code,name,cnpj,days_default) VALUES ($1,$2,$3,$4)',
-        [code, name, cnpj, days]
+        [code, name, cnpj, days||'14 Dias']
       );
     }
-    console.log(`${CLIENT_DATA.length} clientes carregados.`);
+    console.log(`Clientes carregados.`);
   }
 
-  // Migrate: add new columns and fix days column type
+  // Migrations
   try {
     await pool.query("ALTER TABLE orders ADD COLUMN IF NOT EXISTS prices_json TEXT DEFAULT '{}'");
     await pool.query("ALTER TABLE orders ADD COLUMN IF NOT EXISTS capafile REAL DEFAULT 0");
     await pool.query("ALTER TABLE orders ADD COLUMN IF NOT EXISTS musculo REAL DEFAULT 0");
     await pool.query("ALTER TABLE orders ADD COLUMN IF NOT EXISTS lingua REAL DEFAULT 0");
-    // Add unique constraint to prevent duplicate orders
-    await pool.query("ALTER TABLE orders ADD CONSTRAINT IF NOT EXISTS orders_client_week_unique UNIQUE (client_id, week_label)").catch(()=>{});
-    // Remove existing duplicates (keep the one with most data)
-    // Dedup: for each (client_id, week_label) pair, merge prices_json then keep one row
-    await pool.query(`
-      WITH ranked AS (
-        SELECT id, client_id, week_label,
-          ROW_NUMBER() OVER (PARTITION BY client_id, week_label ORDER BY 
-            CASE WHEN prices_json != '{}' AND prices_json IS NOT NULL THEN 0 ELSE 1 END,
-            id DESC
-          ) as rn
-        FROM orders
-      )
-      DELETE FROM orders WHERE id IN (SELECT id FROM ranked WHERE rn > 1)
-    `).catch(()=>{});
-    // Migrate days from REAL to TEXT if needed
     await pool.query("ALTER TABLE orders ALTER COLUMN days TYPE TEXT USING days::TEXT");
     await pool.query("ALTER TABLE clients ADD COLUMN IF NOT EXISTS obs_default TEXT DEFAULT ''");
-    // Fix days_default: convert numeric strings to label format ("14" → "14 Dias")
-    // Fix days_default: normalize all values to label format
     await pool.query("UPDATE clients SET days_default = regexp_replace(days_default, '[^0-9]', '', 'g') || ' Dias' WHERE days_default !~ '[A-Za-z].*[A-Za-z]'");
     await pool.query("UPDATE clients SET days_default = '14 Dias' WHERE days_default IS NULL OR days_default = '' OR days_default = ' Dias'");
-    // Fix orders: where days='14 Dias' but client has different days_default,
-    // update orders to match client's actual default (only if not user-overridden)
-    await pool.query(
-      "UPDATE orders o SET days = c.days_default FROM clients c " +
-      "WHERE o.client_id = c.id::text " +
-      "AND (o.days = '14 Dias' OR o.days = '14' OR o.days IS NULL) " +
-      "AND c.days_default IS NOT NULL AND c.days_default != '14 Dias' AND c.days_default != ''"
-    ).catch(()=>{}); // ignore if fails
-    // Fix orders.days same way
     await pool.query("UPDATE orders SET days = days || ' Dias' WHERE days ~ '^[0-9]+(\\.[0-9]+)?$'");
-    // Migrate clients.days_default from INTEGER to TEXT if needed  
-    await pool.query("ALTER TABLE clients ALTER COLUMN days_default TYPE TEXT USING days_default::TEXT");
-  } catch(e) { /* columns may already exist or already TEXT */ }
+    await pool.query("ALTER TABLE orders ADD CONSTRAINT IF NOT EXISTS orders_client_week_unique UNIQUE (client_id, week_label)").catch(()=>{});
+  } catch(e) { console.log('Migration note:', e.message); }
 
   // Default settings
   await pool.query(`INSERT INTO settings VALUES ('trucks','3') ON CONFLICT (key) DO NOTHING`);
