@@ -117,6 +117,10 @@ async function initDatabase() {
     await pool.query("ALTER TABLE orders ADD COLUMN IF NOT EXISTS capafile REAL DEFAULT 0");
     await pool.query("ALTER TABLE orders ADD COLUMN IF NOT EXISTS musculo REAL DEFAULT 0");
     await pool.query("ALTER TABLE orders ADD COLUMN IF NOT EXISTS lingua REAL DEFAULT 0");
+    await pool.query("ALTER TABLE orders ADD COLUMN IF NOT EXISTS musc_mole REAL DEFAULT 0");
+    await pool.query("ALTER TABLE orders ADD COLUMN IF NOT EXISTS musc_duro REAL DEFAULT 0");
+    await pool.query("ALTER TABLE orders ADD COLUMN IF NOT EXISTS picanha_r REAL DEFAULT 0");
+    await pool.query("ALTER TABLE orders ADD COLUMN IF NOT EXISTS diaf_bloco REAL DEFAULT 0");
     await pool.query("ALTER TABLE orders ALTER COLUMN days TYPE TEXT USING days::TEXT");
     await pool.query("ALTER TABLE clients ADD COLUMN IF NOT EXISTS obs_default TEXT DEFAULT ''");
     await pool.query("UPDATE clients SET days_default = regexp_replace(days_default, '[^0-9]', '', 'g') || ' Dias' WHERE days_default !~ '[A-Za-z].*[A-Za-z]'");
