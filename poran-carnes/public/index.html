@@ -442,7 +442,11 @@ function gc(key){ return CORTES.find(c=>c.key===key); }
 function cKg(cid){
   const key = String(cid).includes('_') ? cid : parseInt(cid);
   const o = orders[key]||{};
-  return CORTES.reduce((s,ct)=>s+(parseFloat(o[ct.key])||0)*ct.kg,0);
+  return CORTES.reduce((s,ct)=>{
+    const q1 = parseFloat(o[ct.key])||0;
+    const q2 = parseFloat(o['_qty2_'+ct.key])||0;
+    return s + (q1+q2)*ct.kg;
+  },0);
 }
 function hasOrd(cid){
   const key = String(cid).includes('_') ? cid : parseInt(cid);
