@@ -600,7 +600,7 @@ function renderPedidos(){
     });
     extraKeys.forEach((key,ei)=>{
       const eo = orders[key]||{};
-      const eKg = CORTES.reduce((s,ct)=>s+(parseFloat(eo[ct.key])||0)*ct.kg,0);
+      const eKg = CORTES.reduce((s,ct)=>s+(parseFloat(eo[ct.key])||0)*ct.kg+(parseFloat(eo['_qty2_'+ct.key])||0)*ct.kg,0);
       const eOrd = CORTES.some(ct=>(parseFloat(eo[ct.key])||0)>0);
       const eDiv=document.createElement('div');
       eDiv.className='client-item';
@@ -738,8 +738,7 @@ function updTotals(){
   [...mainKeys, ...extraKeys2].forEach(key=>{
     const o = orders[key]||{};
     const kg = CORTES.reduce((s,ct)=>s+(parseFloat(o[ct.key])||0)*ct.kg, 0);
-    // Also count qty2 kg (PC items only)
-    const kg2 = CORTES.filter(ct=>ct.unit==='PC').reduce((s,ct)=>s+(parseFloat(o['_qty2_'+ct.key])||0)*ct.kg, 0);
+    const kg2 = CORTES.reduce((s,ct)=>s+(parseFloat(o['_qty2_'+ct.key])||0)*ct.kg, 0);
     if(!CORTES.some(ct=>(parseFloat(o[ct.key])||0)>0)) return;
     tCom++; tKg+=kg+kg2;
     tBoiCas  += (parseFloat(o.boi_cas)||0) + (parseFloat(o['_qty2_boi_cas'])||0);
@@ -874,7 +873,7 @@ function diHTML(key, order, color){
   const c = clients.find(x=>x.id===cid);
   if(!c) return '';
   const o = isExtra ? (orders[key]||{}) : (orders[cid]||{});
-  const kg = CORTES.reduce((s,ct)=>s+(parseFloat(o[ct.key])||0)*ct.kg,0);
+  const kg = CORTES.reduce((s,ct)=>s+(parseFloat(o[ct.key])||0)*ct.kg+(parseFloat(o['_qty2_'+ct.key])||0)*ct.kg,0);
   const cuts = CORTES.filter(ct=>(parseFloat(o[ct.key])||0)>0).map(ct=>`${o[ct.key]} ${ct.label}`).join(', ');
   const extraBadge = isExtra ? `<span style="font-size:10px;color:var(--accent);margin-left:4px">(extra)</span>` : '';
   // Find which truck this key is in and how many items
@@ -924,7 +923,7 @@ function diHTMLUnassigned(key){
   const c = clients.find(x=>x.id===cid);
   if(!c) return '';
   const o = isExtra ? (orders[key]||{}) : (orders[cid]||{});
-  const kg = CORTES.reduce((s,ct)=>s+(parseFloat(o[ct.key])||0)*ct.kg,0);
+  const kg = CORTES.reduce((s,ct)=>s+(parseFloat(o[ct.key])||0)*ct.kg+(parseFloat(o['_qty2_'+ct.key])||0)*ct.kg,0);
   const cuts = CORTES.filter(ct=>(parseFloat(o[ct.key])||0)>0).map(ct=>`${o[ct.key]} ${ct.label}`).join(', ');
   const extraBadge = isExtra ? `<span style="font-size:10px;color:var(--accent);margin-left:4px">(extra)</span>` : '';
   const truckOpts = Array.from({length:cfg.trucks},(_,i)=>`<option value="${i+1}">Truck 0${i+1}</option>`).join('');
