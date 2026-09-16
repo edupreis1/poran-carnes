@@ -2426,6 +2426,173 @@ async function logout(){
 
 // ---- INIT ----
 loadAll();
+
+// ── FINALIZAR SEMANA ─────────────────────────────────────
+async function finalizarSemana(){
+  const temPedido = Object.entries(orders).some(([key, o])=>{
+    if(!o) return false;
+    return CORTES.some(ct=>(parseFloat(o[ct.key])||0)>0);
+  });
+  if(!temPedido){ alert('Nenhum pedido para finalizar.'); return; }
+
+  const hoje = new Date();
+  const dd = String(hoje.getDate()).padStart(2,'0');
+  const mm = String(hoje.getMonth()+1).padStart(2,'0');
+  const aaaa = hoje.getFullYear();
+  const label = 'Pedido ' + dd + '/' + mm + '/' + aaaa;
+
+  if(!confirm('Finalizar semana e salvar como "' + label + '"?\n\nIsso vai zerar todos os pedidos e o roteiro.')) return;
+
+  const snapshotData = {
+    orders: JSON.parse(JSON.stringify(orders)),
+    routeOrder: JSON.parse(JSON.stringify(routeOrder)),
+    truckDates: JSON.parse(JSON.stringify(truckDates)),
+    truckLabels: JSON.parse(JSON.stringify(truckLabels || {})),
+    clients: clients.map(c=>({id:c.id,name:c.name,code:c.code,cnpj:c.cnpj,days_default:c.days_default})),
+    week: WEEK,
+    totalKg: CORTES.reduce((s,ct)=>
+      s + Object.values(orders).reduce((ss,o)=>
+        ss+(parseFloat(o?.[ct.key])||0)*ct.kg+(parseFloat(o?.['_qty2_'+ct.key])||0)*ct.kg, 0
+      ), 0)
+  };
+
+  try {
+    const res = await api('POST', '/api/snapshots', { label, weekLabel: WEEK, data: snapshotData });
+    if(!res || !res.ok){ alert('Erro ao salvar. Tente novamente.'); return; }
+
+    // Zera tudo
+    orders = {};
+    routeOrder = {};
+    truckDates = {};
+    truckLabels = {};
+    await api('DELETE', '/api/orders/' + WEEK);
+    await api('POST', '/api/route/' + WEEK, {routeOrder:{}, truckDates:{}, truckLabels:{}});
+
+    renderPedidos();
+    renderRoteiro();
+    alert('✓ Semana finalizada e salva como "' + label + '"!');
+  } catch(e) {
+    alert('Erro: ' + e.message);
+  }
+}
+
+// ── HISTÓRICO ─────────────────────────────────────────────
+let snapshots = [];
+
+async function loadHistorico(){
+  snapshots = await api('GET', '/api/snapshots') || [];
+  renderHistorico();
+}
+
+function renderHistorico(){
+  const list = document.getElementById('hist-list');
+  if(!list) return;
+  if(!snapshots.length){
+    list.innerHTML = '<div style="color:var(--muted);font-size:13px;padding:20px 0">Nenhum pedido finalizado ainda.</div>';
+    renderDoubleCheck();
+    return;
+  }
+  list.innerHTML = snapshots.map(s=>`
+    <div style="cursor:pointer;padding:12px 14px;border-radius:6px;margin-bottom:6px;background:var(--surface);border:1px solid var(--border);display:flex;justify-content:space-between;align-items:center" onclick="openHistDetail(${s.id})">
+      <div>
+        <div style="font-size:13px;font-weight:600">${s.label}</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:2px">Semana ${s.week_label} &middot; ${new Date(s.created_at).toLocaleDateString('pt-BR')}</div>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <span style="font-size:11px;color:var(--muted)">ver &rsaquo;</span>
+        <button onclick="event.stopPropagation();deleteSnapshot(${s.id})" style="background:none;border:none;color:var(--muted2);cursor:pointer;font-size:18px;line-height:1" title="Excluir">&times;</button>
+      </div>
+    </div>`).join('');
+  renderDoubleCheck();
+}
+
+async function renderDoubleCheck(){
+  const dc = document.getElementById('hist-doublecheck');
+  if(!dc) return;
+  if(snapshots.length < 2){ dc.innerHTML=''; return; }
+  const last5 = snapshots.slice(0,5);
+  const fullSnaps = await Promise.all(last5.map(s=>api('GET','/api/snapshots/'+s.id)));
+  const freq = {};
+  fullSnaps.forEach(snap=>{
+    if(!snap?.snapshot_data?.orders) return;
+    Object.entries(snap.snapshot_data.orders).forEach(([key,o])=>{
+      if(!o||String(key).includes('_')) return;
+      if(CORTES.some(ct=>(parseFloat(o[ct.key])||0)>0)){
+        const cid=parseInt(key); freq[cid]=(freq[cid]||0)+1;
+      }
+    });
+  });
+  const missing = Object.entries(freq)
+    .filter(([cid,count])=>count>=3)
+    .filter(([cid])=>{ const o=orders[parseInt(cid)]; return !o||!CORTES.some(ct=>(parseFloat(o[ct.key])||0)>0); })
+    .map(([cid,count])=>{ const c=clients.find(x=>x.id===parseInt(cid)); return c?{name:c.name,code:c.code,count}:null; })
+    .filter(Boolean).sort((a,b)=>b.count-a.count);
+  if(!missing.length){
+    dc.innerHTML='<div style="background:#e8f5e9;border-radius:6px;padding:10px 14px;font-size:12px;color:#2e7d32;margin-bottom:8px">&#10003; Todos os clientes frequentes já têm pedido esta semana!</div>';
+    return;
+  }
+  dc.innerHTML=`<div style="background:#fff3e0;border:1px solid #ffb74d;border-radius:6px;padding:12px 14px;margin-bottom:8px">
+    <div style="font-size:12px;font-weight:600;color:#e65100;margin-bottom:8px">&#9888; ${missing.length} cliente${missing.length>1?'s':''} frequente${missing.length>1?'s':''} sem pedido esta semana:</div>
+    ${missing.map(m=>`<div style="font-size:12px;color:#bf360c;padding:3px 0;border-bottom:1px solid #ffe0b2"><b>${m.name}</b> <span style="color:#e65100">${m.code}</span> <span style="font-size:11px">(${m.count} dos últimos ${Math.min(5,snapshots.length)} pedidos)</span></div>`).join('')}
+  </div>`;
+}
+
+async function openHistDetail(id){
+  const snap = await api('GET','/api/snapshots/'+id);
+  if(!snap) return;
+  const d = snap.snapshot_data;
+  document.getElementById('hist-list').style.display='none';
+  document.getElementById('hist-doublecheck').style.display='none';
+  document.getElementById('hist-detail').style.display='block';
+  document.getElementById('hist-detail-title').textContent=snap.label;
+  const clientMap={};
+  (d.clients||[]).forEach(c=>{clientMap[c.id]=c;});
+  const mainOrders=Object.entries(d.orders||{}).filter(([k])=>!String(k).includes('_'));
+  const extraOrders=Object.entries(d.orders||{}).filter(([k])=>String(k).includes('_'));
+  const totalKg=d.totalKg?fKg(d.totalKg):'—';
+  const totalCom=mainOrders.filter(([,o])=>o&&CORTES.some(ct=>(parseFloat(o[ct.key])||0)>0)).length;
+  let html=`<div style="background:var(--card);border-radius:8px;padding:12px 16px;margin-bottom:14px;display:flex;gap:20px">
+    <div><div style="font-size:10px;color:var(--muted)">TOTAL KG</div><div style="font-size:18px;font-weight:700">${totalKg}</div></div>
+    <div><div style="font-size:10px;color:var(--muted)">PEDIDOS</div><div style="font-size:18px;font-weight:700">${totalCom}</div></div>
+    <div><div style="font-size:10px;color:var(--muted)">SEMANA</div><div style="font-size:14px;font-weight:600">${d.week||'—'}</div></div>
+  </div>`;
+  mainOrders.forEach(([key,o])=>{
+    if(!o||!CORTES.some(ct=>(parseFloat(o[ct.key])||0)>0)) return;
+    const cid=parseInt(key);
+    const c=clientMap[cid]||{name:'Cliente '+cid,code:''};
+    const items=CORTES.filter(ct=>(parseFloat(o[ct.key])||0)>0).map(ct=>{
+      const q2=parseFloat(o['_qty2_'+ct.key])||0;
+      const lbl=ct.unit==='CX'?'cx de '+ct.label:ct.label;
+      return '<span style="font-size:11px;color:var(--muted)">'+o[ct.key]+' '+lbl+(q2?' + '+q2+' '+lbl:'')+'</span>';
+    }).join(' &middot; ');
+    const clientExtras=extraOrders.filter(([k])=>k.startsWith(cid+'_'));
+    html+=`<div style="border:1px solid var(--border);border-radius:6px;padding:10px 14px;margin-bottom:6px">
+      <div style="font-size:13px;font-weight:600">${c.name} <span style="color:var(--muted);font-size:11px">${c.code}</span></div>
+      <div style="margin-top:4px;display:flex;flex-wrap:wrap;gap:4px">${items}</div>
+      ${o._obs?'<div style="font-size:11px;color:#cc0000;margin-top:4px">'+o._obs+'</div>':''}
+      ${o._days?'<div style="font-size:11px;color:var(--muted);margin-top:2px">'+o._days+'</div>':''}
+      ${clientExtras.map(([ek,eo])=>{
+        const eItems=CORTES.filter(ct=>(parseFloat(eo[ct.key])||0)>0).map(ct=>eo[ct.key]+' '+(ct.unit==='CX'?'cx de '+ct.label:ct.label)).join(' &middot; ');
+        return '<div style="margin-top:6px;padding-top:6px;border-top:1px dashed var(--border);font-size:11px;color:var(--accent)">+ EXTRA: '+eItems+(eo._obs?' — <span style="color:#cc0000">'+eo._obs+'</span>':'')+'</div>';
+      }).join('')}
+    </div>`;
+  });
+  document.getElementById('hist-detail-content').innerHTML=html;
+}
+
+function closeHistDetail(){
+  document.getElementById('hist-list').style.display='';
+  document.getElementById('hist-doublecheck').style.display='';
+  document.getElementById('hist-detail').style.display='none';
+}
+
+async function deleteSnapshot(id){
+  if(!confirm('Excluir este pedido do histórico?')) return;
+  await api('DELETE','/api/snapshots/'+id);
+  snapshots=snapshots.filter(s=>s.id!==id);
+  renderHistorico();
+}
+
 </script>
 </body>
 </html>

@@ -544,4 +544,3 @@ initDatabase().then(database => {
   console.error('Erro ao inicializar banco:', err);
   process.exit(1);
 });
-//cache bust ter 15 set 2026 22:38:39 -03
