@@ -374,7 +374,7 @@ main { max-width: 720px; margin: 0 auto; padding: 20px 16px 100px; }
 </main>
 
 <!-- HISTÓRICO -->
-<div class="panel" id="tab-historico" style="display:none">
+<div class="panel" id="tab-historico">
   <div style="display:flex;gap:10px;align-items:center;margin-bottom:16px;flex-wrap:wrap">
     <div style="font-size:13px;font-weight:600;letter-spacing:.05em">PEDIDOS FINALIZADOS</div>
   </div>
@@ -1754,7 +1754,7 @@ function saveEditC(id){
 
 // ---- TABS ----
 function showTab(id){
-  document.querySelectorAll('.nb').forEach((b,i)=>b.classList.toggle('active',['pedidos','roteiro','email','config'][i]===id));
+  document.querySelectorAll('.nb').forEach((b,i)=>b.classList.toggle('active',['pedidos','roteiro','email','config','historico'][i]===id));
   document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
   document.getElementById('tab-'+id).classList.add('active');
   if(id==='historico') loadHistorico();
