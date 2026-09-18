@@ -187,6 +187,7 @@ main { max-width: 720px; margin: 0 auto; padding: 20px 16px 100px; }
   <button class="nb" onclick="showTab('email')">E-MAIL</button>
   <button class="nb" onclick="showTab('config')">CONFIG</button>
   <button class="nb" onclick="showTab('historico')">HISTÓRICO</button>
+  <button class="nb" onclick="showTab('dashboard')">DASHBOARD</button>
 </nav>
 <main>
 
@@ -392,6 +393,42 @@ main { max-width: 720px; margin: 0 auto; padding: 20px 16px 100px; }
       <div id="hist-detail-title" style="font-size:14px;font-weight:600"></div>
     </div>
     <div id="hist-detail-content"></div>
+  </div>
+</div>
+
+<!-- DASHBOARD -->
+<div class="panel" id="tab-dashboard">
+  <div style="display:flex;gap:10px;align-items:center;margin-bottom:16px;flex-wrap:wrap">
+    <div style="font-size:13px;font-weight:600;letter-spacing:.05em">DASHBOARD</div>
+    <div style="margin-left:auto;display:flex;gap:8px">
+      <select id="dash-filter" onchange="renderDashboard()" style="background:var(--surface);border:1px solid var(--border);border-radius:5px;padding:6px 10px;font-size:12px;font-family:var(--mono);color:var(--text)">
+        <option value="all">Tudo</option>
+        <option value="month">Último mês</option>
+        <option value="quarter">Último trimestre</option>
+        <option value="semester">Último semestre</option>
+      </select>
+    </div>
+  </div>
+
+  <!-- Cards -->
+  <div id="dash-cards" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:20px"></div>
+
+  <!-- KG por pedido -->
+  <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:14px;margin-bottom:14px">
+    <div style="font-size:11px;color:var(--muted);font-weight:600;margin-bottom:12px">KG POR PEDIDO</div>
+    <div id="dash-weekly" style="overflow-x:auto"></div>
+  </div>
+
+  <!-- Top clientes + Top cortes -->
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:14px">
+      <div style="font-size:11px;color:var(--muted);font-weight:600;margin-bottom:12px">TOP CLIENTES (KG)</div>
+      <div id="dash-clients"></div>
+    </div>
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:14px">
+      <div style="font-size:11px;color:var(--muted);font-weight:600;margin-bottom:12px">CORTES QUE MAIS SAEM (KG)</div>
+      <div id="dash-cortes"></div>
+    </div>
   </div>
 </div>
 
@@ -1754,10 +1791,11 @@ function saveEditC(id){
 
 // ---- TABS ----
 function showTab(id){
-  document.querySelectorAll('.nb').forEach((b,i)=>b.classList.toggle('active',['pedidos','roteiro','email','config','historico'][i]===id));
+  document.querySelectorAll('.nb').forEach((b,i)=>b.classList.toggle('active',['pedidos','roteiro','email','config','historico','dashboard'][i]===id));
   document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
   document.getElementById('tab-'+id).classList.add('active');
   if(id==='historico') loadHistorico();
+  if(id==='dashboard') loadDashboard();
   if(id==='roteiro') renderRoteiro();
   if(id==='email') renderEmail();
   if(id==='config'){ 
@@ -2460,6 +2498,8 @@ async function finalizarSemana(){
     const res = await api('POST', '/api/snapshots', { label, weekLabel: WEEK, data: snapshotData });
     if(!res || !res.ok){ alert('Erro ao salvar. Tente novamente.'); return; }
 
+    const finalLabel = res.label || label;
+
     // Zera tudo
     orders = {};
     routeOrder = {};
@@ -2470,7 +2510,7 @@ async function finalizarSemana(){
 
     renderPedidos();
     renderRoteiro();
-    alert('✓ Semana finalizada e salva como "' + label + '"!');
+    alert('✓ Semana finalizada e salva como "' + finalLabel + '"!');
   } catch(e) {
     alert('Erro: ' + e.message);
   }
@@ -2591,6 +2631,111 @@ async function deleteSnapshot(id){
   await api('DELETE','/api/snapshots/'+id);
   snapshots=snapshots.filter(s=>s.id!==id);
   renderHistorico();
+}
+
+
+// ── DASHBOARD ─────────────────────────────────────────────
+let dashData = null;
+
+async function loadDashboard(){
+  dashData = await api('GET', '/api/dashboard');
+  if(!dashData){ 
+    document.getElementById('dash-cards').innerHTML = '<div style="color:var(--muted);font-size:13px">Nenhum dado ainda. Finalize uma semana para ver o dashboard.</div>';
+    return;
+  }
+  renderDashboard();
+}
+
+function filterDashData(data){
+  const filter = document.getElementById('dash-filter')?.value || 'all';
+  if(filter === 'all') return data;
+  const now = new Date();
+  const cutoff = new Date();
+  if(filter === 'month') cutoff.setMonth(now.getMonth()-1);
+  else if(filter === 'quarter') cutoff.setMonth(now.getMonth()-3);
+  else if(filter === 'semester') cutoff.setMonth(now.getMonth()-6);
+  return data.filter(w => new Date(w.created_at) >= cutoff);
+}
+
+function fKgDash(kg){
+  if(kg >= 1000) return (kg/1000).toFixed(1).replace('.',',') + 't';
+  return kg.toLocaleString('pt-BR') + 'kg';
+}
+
+function renderDashboard(){
+  if(!dashData) return;
+  const weekly = filterDashData(dashData.weeklyKg);
+  
+  // ── Cards ──
+  const totalKg = weekly.reduce((s,w)=>s+w.total_kg,0);
+  const totalPedidos = weekly.length;
+  const mediaKg = totalPedidos > 0 ? Math.round(totalKg/totalPedidos) : 0;
+  const maxKg = weekly.length > 0 ? Math.max(...weekly.map(w=>w.total_kg)) : 0;
+
+  document.getElementById('dash-cards').innerHTML = [
+    {label:'TOTAL KG', value: fKgDash(totalKg), color:'var(--accent)'},
+    {label:'PEDIDOS', value: totalPedidos, color:'var(--text)'},
+    {label:'MÉDIA/PEDIDO', value: fKgDash(mediaKg), color:'var(--text)'},
+    {label:'MAIOR PEDIDO', value: fKgDash(maxKg), color:'var(--green)'},
+  ].map(c=>`
+    <div style="background:var(--card);border-radius:8px;padding:14px 16px">
+      <div style="font-size:10px;color:var(--muted);font-weight:600;margin-bottom:6px">${c.label}</div>
+      <div style="font-size:20px;font-weight:700;color:${c.color}">${c.value}</div>
+    </div>`).join('');
+
+  // ── KG por pedido (bar chart SVG) ──
+  const maxW = weekly.length > 0 ? Math.max(...weekly.map(w=>w.total_kg)) : 1;
+  const barH = 20, gap = 4, labelW = 70, barMaxW = 300;
+  const svgH = weekly.length * (barH + gap) + 10;
+  const bars = weekly.map((w,i) => {
+    const barW = Math.max(2, Math.round((w.total_kg / maxW) * barMaxW));
+    const y = i * (barH + gap) + 5;
+    return `
+      <text x="${labelW-6}" y="${y+barH/2+4}" text-anchor="end" font-size="10" fill="var(--muted)" font-family="monospace">${w.label}</text>
+      <rect x="${labelW}" y="${y}" width="${barW}" height="${barH}" rx="3" fill="var(--accent)" opacity="0.8"/>
+      <text x="${labelW+barW+5}" y="${y+barH/2+4}" font-size="10" fill="var(--text)" font-family="monospace">${fKgDash(w.total_kg)}</text>`;
+  }).join('');
+
+  document.getElementById('dash-weekly').innerHTML = weekly.length === 0
+    ? '<div style="color:var(--muted);font-size:12px">Nenhum pedido no período selecionado.</div>'
+    : `<svg width="100%" viewBox="0 0 ${labelW+barMaxW+80} ${svgH}" style="display:block">${bars}</svg>`;
+
+  // ── Top clientes ──
+  // Recalculate from filtered data
+  const clientKgFiltered = {};
+  const snapIds = new Set(weekly.map(w=>w.seq_num));
+  // Use all data since we don't have per-snap client breakdown here
+  // Use dashData.topClients filtered by count
+  const topClients = dashData.topClients.slice(0,10);
+  const maxC = topClients.length > 0 ? topClients[0].kg : 1;
+  document.getElementById('dash-clients').innerHTML = topClients.length === 0
+    ? '<div style="color:var(--muted);font-size:12px">Sem dados.</div>'
+    : topClients.map((c,i)=>`
+      <div style="margin-bottom:6px">
+        <div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:2px">
+          <span style="font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:160px" title="${c.name}">${i+1}. ${c.name}</span>
+          <span style="color:var(--muted);font-family:monospace">${fKgDash(c.kg)}</span>
+        </div>
+        <div style="background:var(--border);border-radius:2px;height:4px">
+          <div style="background:var(--accent);height:4px;border-radius:2px;width:${Math.round(c.kg/maxC*100)}%"></div>
+        </div>
+      </div>`).join('');
+
+  // ── Top cortes ──
+  const topCortes = dashData.topCortes.slice(0,10);
+  const maxCo = topCortes.length > 0 ? topCortes[0].kg : 1;
+  document.getElementById('dash-cortes').innerHTML = topCortes.length === 0
+    ? '<div style="color:var(--muted);font-size:12px">Sem dados.</div>'
+    : topCortes.map((c,i)=>`
+      <div style="margin-bottom:6px">
+        <div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:2px">
+          <span style="font-weight:600">${i+1}. ${c.name}</span>
+          <span style="color:var(--muted);font-family:monospace">${fKgDash(c.kg)}</span>
+        </div>
+        <div style="background:var(--border);border-radius:2px;height:4px">
+          <div style="background:var(--green,#4caf50);height:4px;border-radius:2px;width:${Math.round(c.kg/maxCo*100)}%"></div>
+        </div>
+      </div>`).join('');
 }
 
 </script>

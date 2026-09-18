@@ -356,10 +356,14 @@ app.post('/api/generate-docx', requireAuth, async (req, res) => {
 app.post('/api/snapshots', requireAuth, async (req, res) => {
   try {
     const { label, weekLabel, data } = req.body;
+    // Get next sequence number
+    const countRes = await db.prepare('SELECT COUNT(*) as c FROM snapshots').get();
+    const seqNum = (parseInt(countRes?.c) || 0) + 1;
+    const autoLabel = 'Pedido ' + seqNum;
     await db.prepare(
-      'INSERT INTO snapshots (label, week_label, snapshot_data) VALUES (?, ?, ?)'
-    ).run(label, weekLabel, JSON.stringify(data));
-    res.json({ ok: true });
+      'INSERT INTO snapshots (seq_num, label, week_label, snapshot_data) VALUES (?, ?, ?, ?)'
+    ).run(seqNum, autoLabel, weekLabel, JSON.stringify(data));
+    res.json({ ok: true, seq_num: seqNum, label: autoLabel });
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -389,6 +393,95 @@ app.delete('/api/snapshots/:id', requireAuth, async (req, res) => {
   try {
     await db.prepare('DELETE FROM snapshots WHERE id = ?').run(req.params.id);
     res.json({ ok: true });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// ---- DASHBOARD ----
+app.get('/api/dashboard', requireAuth, async (req, res) => {
+  try {
+    const snaps = await db.prepare(
+      'SELECT id, seq_num, label, week_label, snapshot_data, created_at FROM snapshots ORDER BY created_at ASC'
+    ).all();
+
+    const ORDER_FIELDS_LOCAL = ['boi_cas','nov_cas','boi_ts','boi_tcc','boi_dtb','boi_pab','vac_cas','vac_ts','vac_tcc','vac_dtv','vac_pav','fig','rab','buc','cor','cup','san','lom','dia','ind','lingua','cfile','alcatra','maminha','filet45','filetbc','coxmole','coxduro','patinho','lagarto','capafile','musculo','musc_mole','musc_duro','picanha_r','diaf_bloco','filet_bica'];
+    
+    const weeklyKg = [];
+    const clientKg = {};
+    const corteKg = {};
+
+    snaps.forEach(snap => {
+      let data;
+      try { data = JSON.parse(snap.snapshot_data); } catch(e) { return; }
+      const orders = data.orders || {};
+      let totalKg = 0;
+
+      // CORTES labels
+      const cortesMap = {
+        boi_cas:'Boi Casado', nov_cas:'Novilha', boi_ts:'TS Boi', boi_tcc:'TS Boi C/Cost',
+        boi_dtb:'DTB Boi', boi_pab:'Costela Boi', vac_cas:'Vaca Casada', vac_ts:'TS Vaca',
+        vac_tcc:'TS Vaca C/Cost', vac_dtv:'DTV Vaca', vac_pav:'Costela Vaca',
+        fig:'Fígado', rab:'Rabo', buc:'Bucho', cor:'Coração', cup:'Cupim',
+        san:'Sangue', lom:'Lombo', dia:'Fraldinha Diafragma', ind:'Carne Industrial',
+        lingua:'Língua', cfile:'Contra Filé', alcatra:'Alcatra', maminha:'Maminha',
+        filet45:'Filé Mignon 4/5', filetbc:'Filé Mignon BC', coxmole:'Coxão Mole',
+        coxduro:'Coxão Duro', patinho:'Patinho', lagarto:'Lagarto', capafile:'Capa de Filé',
+        musculo:'Músculo do Traseiro', musc_mole:'Músculo Mole', musc_duro:'Músculo Duro',
+        picanha_r:'Picanha Reserva', diaf_bloco:'Diafragma em Bloco', filet_bica:'Filé Mignon Bica Corrida'
+      };
+
+      // KG weights
+      const kgMap = {
+        boi_cas:295, nov_cas:220, boi_ts:75, boi_tcc:115, boi_dtb:60, boi_pab:18,
+        vac_cas:230, vac_ts:62, vac_tcc:115, vac_dtv:41, vac_pav:13,
+        fig:28, rab:28, buc:28, cor:28, cup:28, san:28, lom:25, dia:25, ind:28,
+        lingua:25, cfile:25, alcatra:25, maminha:25, filet45:15, filetbc:25,
+        coxmole:25, coxduro:25, patinho:25, lagarto:25, capafile:25, musculo:25,
+        musc_mole:25, musc_duro:25, picanha_r:25, diaf_bloco:25, filet_bica:25
+      };
+
+      Object.entries(orders).forEach(([key, o]) => {
+        if(!o) return;
+        const cid = parseInt(key);
+        const isExtra = String(key).includes('_');
+        const clientName = (data.clients||[]).find(c=>c.id===(isExtra?parseInt(key.split('_')[0]):cid))?.name || ('Cliente '+cid);
+
+        ORDER_FIELDS_LOCAL.forEach(f => {
+          const qty = (parseFloat(o[f])||0) + (parseFloat(o['_qty2_'+f])||0);
+          if(qty > 0) {
+            const kg = qty * (kgMap[f] || 25);
+            totalKg += kg;
+            // Client totals (main orders only)
+            if(!isExtra) {
+              clientKg[clientName] = (clientKg[clientName]||0) + kg;
+            }
+            // Corte totals
+            const label = cortesMap[f] || f;
+            corteKg[label] = (corteKg[label]||0) + kg;
+          }
+        });
+      });
+
+      weeklyKg.push({
+        label: snap.label,
+        seq_num: snap.seq_num,
+        week_label: snap.week_label,
+        created_at: snap.created_at,
+        total_kg: Math.round(totalKg)
+      });
+    });
+
+    // Top clients
+    const topClients = Object.entries(clientKg)
+      .map(([name, kg]) => ({ name, kg: Math.round(kg) }))
+      .sort((a,b) => b.kg - a.kg)
+      .slice(0, 15);
+
+    // Top cortes
+    const topCortes = Object.entries(corteKg)
+      .map(([name, kg]) => ({ name, kg: Math.round(kg) }))
+      .sort((a,b) => b.kg - a.kg);
+
+    res.json({ weeklyKg, topClients, topCortes });
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -488,10 +581,14 @@ app.post('/api/generate-docx', requireAuth, async (req, res) => {
 app.post('/api/snapshots', requireAuth, async (req, res) => {
   try {
     const { label, weekLabel, data } = req.body;
+    // Get next sequence number
+    const countRes = await db.prepare('SELECT COUNT(*) as c FROM snapshots').get();
+    const seqNum = (parseInt(countRes?.c) || 0) + 1;
+    const autoLabel = 'Pedido ' + seqNum;
     await db.prepare(
-      'INSERT INTO snapshots (label, week_label, snapshot_data) VALUES (?, ?, ?)'
-    ).run(label, weekLabel, JSON.stringify(data));
-    res.json({ ok: true });
+      'INSERT INTO snapshots (seq_num, label, week_label, snapshot_data) VALUES (?, ?, ?, ?)'
+    ).run(seqNum, autoLabel, weekLabel, JSON.stringify(data));
+    res.json({ ok: true, seq_num: seqNum, label: autoLabel });
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -521,6 +618,95 @@ app.delete('/api/snapshots/:id', requireAuth, async (req, res) => {
   try {
     await db.prepare('DELETE FROM snapshots WHERE id = ?').run(req.params.id);
     res.json({ ok: true });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// ---- DASHBOARD ----
+app.get('/api/dashboard', requireAuth, async (req, res) => {
+  try {
+    const snaps = await db.prepare(
+      'SELECT id, seq_num, label, week_label, snapshot_data, created_at FROM snapshots ORDER BY created_at ASC'
+    ).all();
+
+    const ORDER_FIELDS_LOCAL = ['boi_cas','nov_cas','boi_ts','boi_tcc','boi_dtb','boi_pab','vac_cas','vac_ts','vac_tcc','vac_dtv','vac_pav','fig','rab','buc','cor','cup','san','lom','dia','ind','lingua','cfile','alcatra','maminha','filet45','filetbc','coxmole','coxduro','patinho','lagarto','capafile','musculo','musc_mole','musc_duro','picanha_r','diaf_bloco','filet_bica'];
+    
+    const weeklyKg = [];
+    const clientKg = {};
+    const corteKg = {};
+
+    snaps.forEach(snap => {
+      let data;
+      try { data = JSON.parse(snap.snapshot_data); } catch(e) { return; }
+      const orders = data.orders || {};
+      let totalKg = 0;
+
+      // CORTES labels
+      const cortesMap = {
+        boi_cas:'Boi Casado', nov_cas:'Novilha', boi_ts:'TS Boi', boi_tcc:'TS Boi C/Cost',
+        boi_dtb:'DTB Boi', boi_pab:'Costela Boi', vac_cas:'Vaca Casada', vac_ts:'TS Vaca',
+        vac_tcc:'TS Vaca C/Cost', vac_dtv:'DTV Vaca', vac_pav:'Costela Vaca',
+        fig:'Fígado', rab:'Rabo', buc:'Bucho', cor:'Coração', cup:'Cupim',
+        san:'Sangue', lom:'Lombo', dia:'Fraldinha Diafragma', ind:'Carne Industrial',
+        lingua:'Língua', cfile:'Contra Filé', alcatra:'Alcatra', maminha:'Maminha',
+        filet45:'Filé Mignon 4/5', filetbc:'Filé Mignon BC', coxmole:'Coxão Mole',
+        coxduro:'Coxão Duro', patinho:'Patinho', lagarto:'Lagarto', capafile:'Capa de Filé',
+        musculo:'Músculo do Traseiro', musc_mole:'Músculo Mole', musc_duro:'Músculo Duro',
+        picanha_r:'Picanha Reserva', diaf_bloco:'Diafragma em Bloco', filet_bica:'Filé Mignon Bica Corrida'
+      };
+
+      // KG weights
+      const kgMap = {
+        boi_cas:295, nov_cas:220, boi_ts:75, boi_tcc:115, boi_dtb:60, boi_pab:18,
+        vac_cas:230, vac_ts:62, vac_tcc:115, vac_dtv:41, vac_pav:13,
+        fig:28, rab:28, buc:28, cor:28, cup:28, san:28, lom:25, dia:25, ind:28,
+        lingua:25, cfile:25, alcatra:25, maminha:25, filet45:15, filetbc:25,
+        coxmole:25, coxduro:25, patinho:25, lagarto:25, capafile:25, musculo:25,
+        musc_mole:25, musc_duro:25, picanha_r:25, diaf_bloco:25, filet_bica:25
+      };
+
+      Object.entries(orders).forEach(([key, o]) => {
+        if(!o) return;
+        const cid = parseInt(key);
+        const isExtra = String(key).includes('_');
+        const clientName = (data.clients||[]).find(c=>c.id===(isExtra?parseInt(key.split('_')[0]):cid))?.name || ('Cliente '+cid);
+
+        ORDER_FIELDS_LOCAL.forEach(f => {
+          const qty = (parseFloat(o[f])||0) + (parseFloat(o['_qty2_'+f])||0);
+          if(qty > 0) {
+            const kg = qty * (kgMap[f] || 25);
+            totalKg += kg;
+            // Client totals (main orders only)
+            if(!isExtra) {
+              clientKg[clientName] = (clientKg[clientName]||0) + kg;
+            }
+            // Corte totals
+            const label = cortesMap[f] || f;
+            corteKg[label] = (corteKg[label]||0) + kg;
+          }
+        });
+      });
+
+      weeklyKg.push({
+        label: snap.label,
+        seq_num: snap.seq_num,
+        week_label: snap.week_label,
+        created_at: snap.created_at,
+        total_kg: Math.round(totalKg)
+      });
+    });
+
+    // Top clients
+    const topClients = Object.entries(clientKg)
+      .map(([name, kg]) => ({ name, kg: Math.round(kg) }))
+      .sort((a,b) => b.kg - a.kg)
+      .slice(0, 15);
+
+    // Top cortes
+    const topCortes = Object.entries(corteKg)
+      .map(([name, kg]) => ({ name, kg: Math.round(kg) }))
+      .sort((a,b) => b.kg - a.kg);
+
+    res.json({ weeklyKg, topClients, topCortes });
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
