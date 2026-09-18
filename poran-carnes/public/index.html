@@ -397,38 +397,47 @@ main { max-width: 720px; margin: 0 auto; padding: 20px 16px 100px; }
 </div>
 
 <!-- DASHBOARD -->
-<div class="panel" id="tab-dashboard">
-  <div style="display:flex;gap:10px;align-items:center;margin-bottom:16px;flex-wrap:wrap">
-    <div style="font-size:13px;font-weight:600;letter-spacing:.05em">DASHBOARD</div>
-    <div style="margin-left:auto;display:flex;gap:8px">
-      <select id="dash-filter" onchange="renderDashboard()" style="background:var(--surface);border:1px solid var(--border);border-radius:5px;padding:6px 10px;font-size:12px;font-family:var(--mono);color:var(--text)">
-        <option value="all">Tudo</option>
-        <option value="month">Último mês</option>
-        <option value="quarter">Último trimestre</option>
-        <option value="semester">Último semestre</option>
-      </select>
+<div class="panel" id="tab-dashboard" style="padding:20px 24px">
+  <!-- Header -->
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:24px;flex-wrap:wrap;gap:12px">
+    <div>
+      <div style="font-size:18px;font-weight:700;letter-spacing:-.01em">Dashboard</div>
+      <div style="font-size:12px;color:var(--muted);margin-top:2px">Análise de pedidos e volume</div>
     </div>
+    <select id="dash-filter" onchange="renderDashboard()" style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 14px;font-size:12px;font-family:var(--sans);color:var(--text);cursor:pointer">
+      <option value="all">Todos os pedidos</option>
+      <option value="month">Último mês</option>
+      <option value="quarter">Último trimestre</option>
+      <option value="semester">Último semestre</option>
+    </select>
   </div>
 
   <!-- Cards -->
-  <div id="dash-cards" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:20px"></div>
+  <div id="dash-cards" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:24px"></div>
 
   <!-- KG por pedido -->
-  <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:14px;margin-bottom:14px">
-    <div style="font-size:11px;color:var(--muted);font-weight:600;margin-bottom:12px">KG POR PEDIDO</div>
+  <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:20px;margin-bottom:16px">
+    <div style="font-size:11px;color:var(--muted);font-weight:700;letter-spacing:.08em;margin-bottom:16px">KG POR PEDIDO</div>
     <div id="dash-weekly" style="overflow-x:auto"></div>
   </div>
 
   <!-- Top clientes + Top cortes -->
-  <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
-    <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:14px">
-      <div style="font-size:11px;color:var(--muted);font-weight:600;margin-bottom:12px">TOP CLIENTES (KG)</div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:20px">
+      <div style="font-size:11px;color:var(--muted);font-weight:700;letter-spacing:.08em;margin-bottom:16px">TOP CLIENTES — KG TOTAL</div>
       <div id="dash-clients"></div>
     </div>
-    <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:14px">
-      <div style="font-size:11px;color:var(--muted);font-weight:600;margin-bottom:12px">CORTES QUE MAIS SAEM (KG)</div>
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:20px">
+      <div style="font-size:11px;color:var(--muted);font-weight:700;letter-spacing:.08em;margin-bottom:16px">CORTES QUE MAIS SAEM</div>
       <div id="dash-cortes"></div>
     </div>
+  </div>
+
+  <!-- Empty state -->
+  <div id="dash-empty" style="display:none;text-align:center;padding:60px 20px;color:var(--muted)">
+    <div style="font-size:32px;margin-bottom:12px">📊</div>
+    <div style="font-size:14px;font-weight:600;margin-bottom:6px">Nenhum dado ainda</div>
+    <div style="font-size:12px">Finalize a primeira semana para ver o dashboard.</div>
   </div>
 </div>
 
@@ -2672,15 +2681,27 @@ function renderDashboard(){
   const mediaKg = totalPedidos > 0 ? Math.round(totalKg/totalPedidos) : 0;
   const maxKg = weekly.length > 0 ? Math.max(...weekly.map(w=>w.total_kg)) : 0;
 
+  const emptyEl = document.getElementById('dash-empty');
+  if(weekly.length === 0 && dashData.weeklyKg.length === 0){
+    if(emptyEl) emptyEl.style.display='block';
+    document.getElementById('dash-cards').innerHTML='';
+    document.getElementById('dash-weekly').innerHTML='';
+    document.getElementById('dash-clients').innerHTML='';
+    document.getElementById('dash-cortes').innerHTML='';
+    return;
+  }
+  if(emptyEl) emptyEl.style.display='none';
+
   document.getElementById('dash-cards').innerHTML = [
-    {label:'TOTAL KG', value: fKgDash(totalKg), color:'var(--accent)'},
-    {label:'PEDIDOS', value: totalPedidos, color:'var(--text)'},
-    {label:'MÉDIA/PEDIDO', value: fKgDash(mediaKg), color:'var(--text)'},
-    {label:'MAIOR PEDIDO', value: fKgDash(maxKg), color:'var(--green)'},
+    {label:'TOTAL KG', value: fKgDash(totalKg), sub: totalPedidos + ' pedido' + (totalPedidos!==1?'s':''), color:'var(--accent)'},
+    {label:'MÉDIA POR PEDIDO', value: fKgDash(mediaKg), sub: 'por semana', color:'var(--text)'},
+    {label:'MAIOR PEDIDO', value: fKgDash(maxKg), sub: weekly.find(w=>w.total_kg===maxKg)?.label||'', color:'var(--text)'},
+    {label:'CLIENTES ATIVOS', value: dashData.topClients.length, sub: 'compraram no período', color:'var(--text)'},
   ].map(c=>`
-    <div style="background:var(--card);border-radius:8px;padding:14px 16px">
-      <div style="font-size:10px;color:var(--muted);font-weight:600;margin-bottom:6px">${c.label}</div>
-      <div style="font-size:20px;font-weight:700;color:${c.color}">${c.value}</div>
+    <div style="background:var(--card);border-radius:12px;padding:18px 20px;border:1px solid var(--border)">
+      <div style="font-size:10px;color:var(--muted);font-weight:700;letter-spacing:.08em;margin-bottom:8px">${c.label}</div>
+      <div style="font-size:24px;font-weight:700;color:${c.color};line-height:1">${c.value}</div>
+      <div style="font-size:11px;color:var(--muted);margin-top:4px">${c.sub}</div>
     </div>`).join('');
 
   // ── KG por pedido (bar chart SVG) ──
