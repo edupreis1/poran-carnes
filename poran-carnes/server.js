@@ -356,13 +356,24 @@ app.post('/api/generate-docx', requireAuth, async (req, res) => {
 app.post('/api/snapshots', requireAuth, async (req, res) => {
   try {
     const { label, weekLabel, data } = req.body;
+    // Ensure seq_num column exists
+    await db.prepare("SELECT seq_num FROM snapshots LIMIT 1").get().catch(async ()=>{
+      await db.exec("ALTER TABLE snapshots ADD COLUMN seq_num INTEGER");
+    });
     // Get next sequence number
     const countRes = await db.prepare('SELECT COUNT(*) as c FROM snapshots').get();
     const seqNum = (parseInt(countRes?.c) || 0) + 1;
     const autoLabel = 'Pedido ' + seqNum;
-    await db.prepare(
-      'INSERT INTO snapshots (seq_num, label, week_label, snapshot_data) VALUES (?, ?, ?, ?)'
-    ).run(seqNum, autoLabel, weekLabel, JSON.stringify(data));
+    // Try with seq_num, fallback without
+    try {
+      await db.prepare(
+        'INSERT INTO snapshots (seq_num, label, week_label, snapshot_data) VALUES (?, ?, ?, ?)'
+      ).run(seqNum, autoLabel, weekLabel, JSON.stringify(data));
+    } catch(e2) {
+      await db.prepare(
+        'INSERT INTO snapshots (label, week_label, snapshot_data) VALUES (?, ?, ?)'
+      ).run(autoLabel, weekLabel, JSON.stringify(data));
+    }
     res.json({ ok: true, seq_num: seqNum, label: autoLabel });
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
@@ -581,13 +592,24 @@ app.post('/api/generate-docx', requireAuth, async (req, res) => {
 app.post('/api/snapshots', requireAuth, async (req, res) => {
   try {
     const { label, weekLabel, data } = req.body;
+    // Ensure seq_num column exists
+    await db.prepare("SELECT seq_num FROM snapshots LIMIT 1").get().catch(async ()=>{
+      await db.exec("ALTER TABLE snapshots ADD COLUMN seq_num INTEGER");
+    });
     // Get next sequence number
     const countRes = await db.prepare('SELECT COUNT(*) as c FROM snapshots').get();
     const seqNum = (parseInt(countRes?.c) || 0) + 1;
     const autoLabel = 'Pedido ' + seqNum;
-    await db.prepare(
-      'INSERT INTO snapshots (seq_num, label, week_label, snapshot_data) VALUES (?, ?, ?, ?)'
-    ).run(seqNum, autoLabel, weekLabel, JSON.stringify(data));
+    // Try with seq_num, fallback without
+    try {
+      await db.prepare(
+        'INSERT INTO snapshots (seq_num, label, week_label, snapshot_data) VALUES (?, ?, ?, ?)'
+      ).run(seqNum, autoLabel, weekLabel, JSON.stringify(data));
+    } catch(e2) {
+      await db.prepare(
+        'INSERT INTO snapshots (label, week_label, snapshot_data) VALUES (?, ?, ?)'
+      ).run(autoLabel, weekLabel, JSON.stringify(data));
+    }
     res.json({ ok: true, seq_num: seqNum, label: autoLabel });
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
