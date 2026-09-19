@@ -130,6 +130,26 @@ async function initDatabase() {
     await pool.query("ALTER TABLE orders ADD COLUMN IF NOT EXISTS picanha_r REAL DEFAULT 0");
     await pool.query("ALTER TABLE orders ADD COLUMN IF NOT EXISTS diaf_bloco REAL DEFAULT 0");
     await pool.query("ALTER TABLE orders ADD COLUMN IF NOT EXISTS filet_bica REAL DEFAULT 0");
+    // Migrate existing orders to 'active' key (fixed key, no more weekly rotation)
+    try {
+      const ar = await pool.query("SELECT COUNT(*) FROM orders WHERE week_label = 'active'");
+      const or2 = await pool.query("SELECT COUNT(*) FROM orders WHERE week_label != 'active'");
+      if(parseInt(ar.rows[0].count)===0 && parseInt(or2.rows[0].count)>0){
+        const lw = await pool.query("SELECT week_label FROM orders WHERE week_label != 'active' ORDER BY created_at DESC LIMIT 1");
+        if(lw.rows[0]) {
+          await pool.query("UPDATE orders SET week_label = 'active' WHERE week_label = $1", [lw.rows[0].week_label]);
+          console.log('Migrated orders to active key:', lw.rows[0].week_label);
+        }
+      }
+    } catch(e) { console.log('Migration note:', e.message); }
+    // Also migrate routes to 'active' key
+    try {
+      const ar2 = await pool.query("SELECT COUNT(*) FROM routes WHERE week_label = 'active'");
+      if(parseInt(ar2.rows[0].count)===0){
+        const lw2 = await pool.query("SELECT week_label FROM routes ORDER BY updated_at DESC LIMIT 1");
+        if(lw2.rows[0]) await pool.query("UPDATE routes SET week_label = 'active' WHERE week_label = $1", [lw2.rows[0].week_label]);
+      }
+    } catch(e) {}
     await pool.query("ALTER TABLE orders ALTER COLUMN days TYPE TEXT USING days::TEXT");
     await pool.query("ALTER TABLE clients ADD COLUMN IF NOT EXISTS obs_default TEXT DEFAULT ''");
     await pool.query("UPDATE clients SET days_default = regexp_replace(days_default, '[^0-9]', '', 'g') || ' Dias' WHERE days_default !~ '[A-Za-z].*[A-Za-z]'");

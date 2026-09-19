@@ -1834,7 +1834,7 @@ function weekLabel(){
   const dd = String(monday.getDate()).padStart(2,'0');
   return `${y}-${m}-${dd}`; // e.g. "2026-04-20" — stable all week
 }
-let WEEK = weekLabel();
+let WEEK = 'active'; // Fixed key — stays until finalized
 
 // ---- API HELPERS ----
 async function api(method, path, body){
@@ -2158,7 +2158,7 @@ async function loadAll(){
   console.log('[Poran] Loading orders for week:', WEEK);
   // Show week in UI for debugging
   const ind = document.getElementById('save-indicator');
-  if(ind) ind.textContent = 'semana: '+WEEK;
+  // week display removed
   setTimeout(()=>{ if(ind && ind.textContent.startsWith('semana')) ind.textContent=''; }, 3000);
   const ords=await api('GET',`/api/orders/${WEEK}`);
   orders={};
@@ -2482,21 +2482,17 @@ async function finalizarSemana(){
   });
   if(!temPedido){ alert('Nenhum pedido para finalizar.'); return; }
 
-  const hoje = new Date();
-  const dd = String(hoje.getDate()).padStart(2,'0');
-  const mm = String(hoje.getMonth()+1).padStart(2,'0');
-  const aaaa = hoje.getFullYear();
-  const label = 'Pedido ' + dd + '/' + mm + '/' + aaaa;
-
   if(!confirm('Finalizar semana e salvar como "' + label + '"?\n\nIsso vai zerar todos os pedidos e o roteiro.')) return;
 
+  const hoje = new Date();
   const snapshotData = {
     orders: JSON.parse(JSON.stringify(orders)),
     routeOrder: JSON.parse(JSON.stringify(routeOrder)),
     truckDates: JSON.parse(JSON.stringify(truckDates)),
     truckLabels: JSON.parse(JSON.stringify(truckLabels || {})),
     clients: clients.map(c=>({id:c.id,name:c.name,code:c.code,cnpj:c.cnpj,days_default:c.days_default})),
-    week: WEEK,
+    closed_at: hoje.toISOString(),
+    week: hoje.toISOString().slice(0,10),
     totalKg: CORTES.reduce((s,ct)=>
       s + Object.values(orders).reduce((ss,o)=>
         ss+(parseFloat(o?.[ct.key])||0)*ct.kg+(parseFloat(o?.['_qty2_'+ct.key])||0)*ct.kg, 0
@@ -2514,8 +2510,8 @@ async function finalizarSemana(){
     routeOrder = {};
     truckDates = {};
     truckLabels = {};
-    await api('DELETE', '/api/orders/' + WEEK);
-    await api('POST', '/api/route/' + WEEK, {routeOrder:{}, truckDates:{}, truckLabels:{}});
+    await api('DELETE', '/api/orders/active');
+    await api('POST', '/api/route/active', {routeOrder:{}, truckDates:{}, truckLabels:{}});
 
     renderPedidos();
     renderRoteiro();
