@@ -139,45 +139,51 @@ async function initDatabase() {
     await pool.query("UPDATE orders SET days = days || ' Dias' WHERE days ~ '^[0-9]+(\\.[0-9]+)?$'");
   } catch(e) { console.log('Migration note:', e.message); }
 
-  // --- CRITICAL: Migrate ALL old week_label orders to 'active' ---
-  // First drop the unique constraint if it exists (it blocks the migration)
+  // --- CLEANUP: Remove old week_label orders (already passed weeks) ---
+  // Drop the unique constraint first (may block operations)
   try {
     await pool.query("ALTER TABLE orders DROP CONSTRAINT IF EXISTS orders_client_week_unique");
   } catch(e) { console.log('Drop constraint note:', e.message); }
 
   try {
-    const ar = await pool.query("SELECT COUNT(*) FROM orders WHERE week_label = 'active'");
+    // 1. Delete any orders with old week_label (not 'active') — those weeks already passed
     const nonActive = await pool.query("SELECT COUNT(*) FROM orders WHERE week_label != 'active'");
-    const activeCount = parseInt(ar.rows[0].count);
     const oldCount = parseInt(nonActive.rows[0].count);
-
     if(oldCount > 0) {
-      console.log(`Migrating ${oldCount} old orders to 'active' (${activeCount} already active)...`);
-      // For each old order: if same client_id already exists in 'active', merge (add quantities)
-      // If not, just update week_label to 'active'
-      // Strategy: use a temp table approach - just update week_label and handle duplicates
-      // First: for duplicate client_ids, keep the one with the most data (max boi_cas)
-      // Simple approach: update all non-active to active, delete duplicates keeping best row
-      await pool.query("UPDATE orders SET week_label = 'active' WHERE week_label != 'active'");
-      // Now remove exact duplicates keeping only the row with max id per client_id
-      await pool.query(`
-        DELETE FROM orders
-        WHERE id IN (
-          SELECT id FROM (
-            SELECT id,
-              ROW_NUMBER() OVER (PARTITION BY client_id, week_label ORDER BY
-                (boi_cas + nov_cas + vac_cas) DESC, id DESC) as rn
-            FROM orders
-            WHERE week_label = 'active'
-          ) sub
-          WHERE rn > 1
-        )
-      `);
-      console.log('Migration to active complete.');
+      console.log(`Deleting ${oldCount} old non-active orders (already-passed weeks)...`);
+      await pool.query("DELETE FROM orders WHERE week_label != 'active'");
+      console.log('Old orders deleted.');
     }
-  } catch(e) { console.log('Active migration note:', e.message); }
 
-  // Re-add unique constraint after migration
+    // 2. Remove 'active' orders that are older than 21 days — these are leftover from
+    //    a previous bad migration that pulled historical orders into 'active'.
+    //    Real current-week orders are always recent.
+    const staleActive = await pool.query(
+      "SELECT COUNT(*) FROM orders WHERE week_label = 'active' AND created_at < NOW() - INTERVAL '21 days'"
+    );
+    const staleCount = parseInt(staleActive.rows[0].count);
+    if(staleCount > 0) {
+      console.log(`Deleting ${staleCount} stale 'active' orders (older than 21 days, from bad migration)...`);
+      await pool.query("DELETE FROM orders WHERE week_label = 'active' AND created_at < NOW() - INTERVAL '21 days'");
+      console.log('Stale active orders deleted.');
+    }
+
+    // 3. Remove any remaining duplicates (keep newest per client_id)
+    await pool.query(`
+      DELETE FROM orders
+      WHERE id IN (
+        SELECT id FROM (
+          SELECT id,
+            ROW_NUMBER() OVER (PARTITION BY client_id ORDER BY created_at DESC, id DESC) as rn
+          FROM orders
+          WHERE week_label = 'active'
+        ) sub
+        WHERE rn > 1
+      )
+    `);
+  } catch(e) { console.log('Cleanup note:', e.message); }
+
+  // Re-add unique constraint
   try {
     await pool.query("ALTER TABLE orders ADD CONSTRAINT orders_client_week_unique UNIQUE (client_id, week_label)");
   } catch(e) { console.log('Re-add constraint note:', e.message); }

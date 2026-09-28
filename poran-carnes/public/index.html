@@ -2482,9 +2482,15 @@ async function finalizarSemana(){
   });
   if(!temPedido){ alert('Nenhum pedido para finalizar.'); return; }
 
+  // Build a human-readable label for this snapshot
+  const hoje = new Date();
+  const dd = String(hoje.getDate()).padStart(2,'0');
+  const mm = String(hoje.getMonth()+1).padStart(2,'0');
+  const yyyy = hoje.getFullYear();
+  const label = `Semana ${dd}/${mm}/${yyyy}`;
+
   if(!confirm('Finalizar semana e salvar como "' + label + '"?\n\nIsso vai zerar todos os pedidos e o roteiro.')) return;
 
-  const hoje = new Date();
   const snapshotData = {
     orders: JSON.parse(JSON.stringify(orders)),
     routeOrder: JSON.parse(JSON.stringify(routeOrder)),

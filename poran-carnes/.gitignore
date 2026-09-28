@@ -1,6 +1,0 @@
-node_modules/
-poran.db
-*.db
-*.db-shm
-*.db-wal
-.env
