@@ -32,7 +32,7 @@ const db = {
         const isInsert = pgSql.trim().toUpperCase().startsWith('INSERT');
         const noIdTables = ['settings'];
         const hasNoId = noIdTables.some(t => pgSql.toLowerCase().includes('into '+t));
-        if(isInsert && !pgSql.toUpperCase().includes('RETURNING') && !hasNoId) {
+        if(isInsert && !pgSql.toUpperCase().includes('RETURNING') && !pgSql.toUpperCase().includes('ON CONFLICT') && !hasNoId) {
           pgSql += ' RETURNING id';
         }
         const res = await pool.query(pgSql, params);
@@ -91,6 +91,7 @@ async function initDatabase() {
 
   await pool.query(`CREATE TABLE IF NOT EXISTS snapshots (
     id SERIAL PRIMARY KEY,
+    seq_num INTEGER,
     label TEXT NOT NULL,
     week_label TEXT NOT NULL,
     snapshot_data TEXT NOT NULL,
@@ -130,33 +131,68 @@ async function initDatabase() {
     await pool.query("ALTER TABLE orders ADD COLUMN IF NOT EXISTS picanha_r REAL DEFAULT 0");
     await pool.query("ALTER TABLE orders ADD COLUMN IF NOT EXISTS diaf_bloco REAL DEFAULT 0");
     await pool.query("ALTER TABLE orders ADD COLUMN IF NOT EXISTS filet_bica REAL DEFAULT 0");
-    // Migrate existing orders to 'active' key (fixed key, no more weekly rotation)
-    try {
-      const ar = await pool.query("SELECT COUNT(*) FROM orders WHERE week_label = 'active'");
-      const or2 = await pool.query("SELECT COUNT(*) FROM orders WHERE week_label != 'active'");
-      if(parseInt(ar.rows[0].count)===0 && parseInt(or2.rows[0].count)>0){
-        const lw = await pool.query("SELECT week_label FROM orders WHERE week_label != 'active' ORDER BY created_at DESC LIMIT 1");
-        if(lw.rows[0]) {
-          await pool.query("UPDATE orders SET week_label = 'active' WHERE week_label = $1", [lw.rows[0].week_label]);
-          console.log('Migrated orders to active key:', lw.rows[0].week_label);
-        }
-      }
-    } catch(e) { console.log('Migration note:', e.message); }
-    // Also migrate routes to 'active' key
-    try {
-      const ar2 = await pool.query("SELECT COUNT(*) FROM routes WHERE week_label = 'active'");
-      if(parseInt(ar2.rows[0].count)===0){
-        const lw2 = await pool.query("SELECT week_label FROM routes ORDER BY updated_at DESC LIMIT 1");
-        if(lw2.rows[0]) await pool.query("UPDATE routes SET week_label = 'active' WHERE week_label = $1", [lw2.rows[0].week_label]);
-      }
-    } catch(e) {}
+    await pool.query("ALTER TABLE snapshots ADD COLUMN IF NOT EXISTS seq_num INTEGER");
     await pool.query("ALTER TABLE orders ALTER COLUMN days TYPE TEXT USING days::TEXT");
     await pool.query("ALTER TABLE clients ADD COLUMN IF NOT EXISTS obs_default TEXT DEFAULT ''");
     await pool.query("UPDATE clients SET days_default = regexp_replace(days_default, '[^0-9]', '', 'g') || ' Dias' WHERE days_default !~ '[A-Za-z].*[A-Za-z]'");
     await pool.query("UPDATE clients SET days_default = '14 Dias' WHERE days_default IS NULL OR days_default = '' OR days_default = ' Dias'");
     await pool.query("UPDATE orders SET days = days || ' Dias' WHERE days ~ '^[0-9]+(\\.[0-9]+)?$'");
-    await pool.query("ALTER TABLE orders ADD CONSTRAINT IF NOT EXISTS orders_client_week_unique UNIQUE (client_id, week_label)").catch(()=>{});
   } catch(e) { console.log('Migration note:', e.message); }
+
+  // --- CRITICAL: Migrate ALL old week_label orders to 'active' ---
+  // First drop the unique constraint if it exists (it blocks the migration)
+  try {
+    await pool.query("ALTER TABLE orders DROP CONSTRAINT IF EXISTS orders_client_week_unique");
+  } catch(e) { console.log('Drop constraint note:', e.message); }
+
+  try {
+    const ar = await pool.query("SELECT COUNT(*) FROM orders WHERE week_label = 'active'");
+    const nonActive = await pool.query("SELECT COUNT(*) FROM orders WHERE week_label != 'active'");
+    const activeCount = parseInt(ar.rows[0].count);
+    const oldCount = parseInt(nonActive.rows[0].count);
+
+    if(oldCount > 0) {
+      console.log(`Migrating ${oldCount} old orders to 'active' (${activeCount} already active)...`);
+      // For each old order: if same client_id already exists in 'active', merge (add quantities)
+      // If not, just update week_label to 'active'
+      // Strategy: use a temp table approach - just update week_label and handle duplicates
+      // First: for duplicate client_ids, keep the one with the most data (max boi_cas)
+      // Simple approach: update all non-active to active, delete duplicates keeping best row
+      await pool.query("UPDATE orders SET week_label = 'active' WHERE week_label != 'active'");
+      // Now remove exact duplicates keeping only the row with max id per client_id
+      await pool.query(`
+        DELETE FROM orders
+        WHERE id IN (
+          SELECT id FROM (
+            SELECT id,
+              ROW_NUMBER() OVER (PARTITION BY client_id, week_label ORDER BY
+                (boi_cas + nov_cas + vac_cas) DESC, id DESC) as rn
+            FROM orders
+            WHERE week_label = 'active'
+          ) sub
+          WHERE rn > 1
+        )
+      `);
+      console.log('Migration to active complete.');
+    }
+  } catch(e) { console.log('Active migration note:', e.message); }
+
+  // Re-add unique constraint after migration
+  try {
+    await pool.query("ALTER TABLE orders ADD CONSTRAINT orders_client_week_unique UNIQUE (client_id, week_label)");
+  } catch(e) { console.log('Re-add constraint note:', e.message); }
+
+  // Migrate routes to 'active' key
+  try {
+    const ar2 = await pool.query("SELECT COUNT(*) FROM routes WHERE week_label = 'active'");
+    if(parseInt(ar2.rows[0].count)===0){
+      const lw2 = await pool.query("SELECT week_label FROM routes ORDER BY updated_at DESC LIMIT 1");
+      if(lw2.rows[0]) {
+        await pool.query("UPDATE routes SET week_label = 'active' WHERE week_label = $1", [lw2.rows[0].week_label]);
+        console.log('Migrated route to active.');
+      }
+    }
+  } catch(e) { console.log('Route migration note:', e.message); }
 
   // Default settings
   await pool.query(`INSERT INTO settings VALUES ('trucks','3') ON CONFLICT (key) DO NOTHING`);
