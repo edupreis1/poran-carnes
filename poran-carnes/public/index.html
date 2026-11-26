@@ -1274,6 +1274,7 @@ function makePinSVG(color, label) {
 async function renderMap(withOrd) {
   const legend = document.getElementById('map-legend');
   const placeholder = document.getElementById('map-placeholder');
+  if (!legend || !placeholder) return; // mapa não está na tela
   legend.innerHTML = '';
 
   const withAddr = withOrd.filter(c => c.address && c.address.trim());
@@ -2476,6 +2477,23 @@ loadAll();
 
 // ── FINALIZAR SEMANA ─────────────────────────────────────
 async function finalizarSemana(){
+  // Busca os pedidos salvos no servidor, para incluir o que outras pessoas
+  // lançaram em outros computadores (a tela pode estar desatualizada).
+  try {
+    const serverOrders = await api('GET', `/api/orders/${WEEK}`);
+    if(!serverOrders){ return; }
+    orders = {};
+    Object.entries(serverOrders).forEach(([k,v])=>{
+      const key = k.includes('_') ? k : parseInt(k);
+      orders[key] = Object.assign({}, v);
+    });
+    clients.forEach(c=>{ if(orders[c.id]===undefined) orders[c.id]={}; });
+  } catch(e) {
+    alert('Não foi possível carregar os pedidos atualizados. Verifique a conexão e tente de novo.');
+    return;
+  }
+  renderPedidos();
+
   const temPedido = Object.entries(orders).some(([key, o])=>{
     if(!o) return false;
     return CORTES.some(ct=>(parseFloat(o[ct.key])||0)>0);
