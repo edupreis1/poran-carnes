@@ -1,76 +1,78 @@
-# Poran Carnes — Sistema de Roteiro
+# Poran Carnes — Sistema de Roteiro e Pedidos
 
-## Login padrão
-- **Usuário:** beto
-- **Senha:** poran2024
+Sistema interno de pedidos semanais e roteiro dos caminhões.
+Node.js + Express + PostgreSQL, publicado no Railway.
 
-> Altere a senha pelo menu Config após o primeiro acesso.
+## Login
 
----
-
-## Como subir no Railway (passo a passo)
-
-### 1. Criar repositório no GitHub
-
-1. Acesse [github.com](https://github.com) e faça login
-2. Clique em **"New repository"**
-3. Nome: `poran-carnes`
-4. Deixe como **Private**
-5. Clique em **"Create repository"**
-
-### 2. Subir os arquivos
-
-Na página do repositório recém-criado, clique em **"uploading an existing file"** e arraste todos os arquivos desta pasta (exceto `node_modules` e `poran.db` se existirem).
-
-Arquivos a enviar:
-```
-server.js
-database.js
-package.json
-.gitignore
-public/
-  index.html
-  login.html
-```
-
-Clique em **"Commit changes"**.
-
-### 3. Criar conta no Railway
-
-1. Acesse [railway.app](https://railway.app)
-2. Clique em **"Login"** → **"Login with GitHub"**
-3. Autorize o acesso
-
-### 4. Criar projeto no Railway
-
-1. Clique em **"New Project"**
-2. Selecione **"Deploy from GitHub repo"**
-3. Selecione o repositório `poran-carnes`
-4. Railway vai detectar automaticamente que é Node.js
-
-### 5. Configurar variáveis de ambiente
-
-No painel do projeto, clique em **"Variables"** e adicione:
-
-```
-SESSION_SECRET = uma-frase-secreta-qualquer-longa
-NODE_ENV = production
-```
-
-### 6. Acessar
-
-Após o deploy (leva ~2 minutos), Railway gera um link tipo:
-`https://poran-carnes-production.up.railway.app`
-
-Esse é o link que o Beto vai acessar.
+No primeiro acesso a um banco novo, o sistema cria o usuário `beto` com a senha padrão
+(definida em `database.js`). **Troque a senha pelo menu Config logo no primeiro acesso.**
 
 ---
 
-## Como atualizar depois
+## Ambientes: produção e teste
 
-Quando precisar de alguma alteração:
-1. Substitua os arquivos no GitHub (arraste os novos por cima dos antigos)
-2. Railway faz o redeploy automaticamente em ~1 minuto
+O projeto tem dois ambientes no Railway, cada um com o seu próprio banco Postgres:
+
+| | Produção | Teste |
+|---|---|---|
+| Ramo do GitHub | `main` | `staging` |
+| Banco | banco real | banco separado, com dados de exemplo |
+| `APP_ENV` | `production` | `staging` |
+| Faixa no topo | nenhuma | "AMBIENTE DE TESTE" |
+
+**Fluxo de trabalho:**
+1. Toda mudança vai primeiro para o ramo `staging`.
+2. O Railway publica sozinho no endereço de teste.
+3. Testar lá (lançar pedidos, fechar semana, ver o dashboard).
+4. Se estiver bom, abrir um PR de `staging` para `main`. Ao juntar, vai para a produção.
+
+> Atenção: o `database.js` roda uma limpeza de pedidos antigos toda vez que o sistema
+> reinicia. É mais um motivo para testar mudanças primeiro no ambiente de teste.
+
+### Variáveis de ambiente
+
+| Variável | Produção | Teste | Para que serve |
+|---|---|---|---|
+| `DATABASE_URL` | banco de produção | banco de teste | conexão com o Postgres (o Railway preenche) |
+| `SESSION_SECRET` | texto longo e aleatório | outro texto, diferente | protege o login |
+| `APP_ENV` | `production` | `staging` | liga a faixa de teste e o script de dados de exemplo |
+| `PROD_DATABASE_HOST` | não precisa | host do banco de produção | trava: o teste se recusa a subir se o `DATABASE_URL` apontar para esse host |
+
+### Criar o ambiente de teste no Railway (uma vez só)
+
+1. No projeto, clique no nome do ambiente ("production") → **New Environment** → nome `staging`,
+   duplicando a produção. O Postgres do novo ambiente é um banco **novo e vazio**.
+2. Confira que o Postgres do `staging` é outro banco (host diferente do de produção).
+3. No serviço do app, no ambiente `staging`: **Settings → Source** → ramo `staging`.
+   **Root Directory** = `poran-carnes`.
+4. Em **Variables** (só no `staging`): `DATABASE_URL` do Postgres do staging,
+   `SESSION_SECRET` novo, `APP_ENV=staging` e `PROD_DATABASE_HOST` com o host do banco de produção.
+5. **Settings → Networking → Generate Domain** para ter o link de teste.
+
+### Dados de exemplo no teste
+
+O banco de teste recebe sozinho a lista de clientes (`clients_seed.js`) na primeira vez que sobe.
+Para criar uma semana de pedidos de exemplo, rode no serviço do ambiente `staging`:
+
+```
+npm run seed:staging
+```
+
+O script só funciona com `APP_ENV=staging`; em produção ele se recusa a rodar.
+
+---
+
+## Rodar localmente
+
+Precisa de um Postgres local.
+
+```
+npm install
+DATABASE_URL=postgres://usuario:senha@localhost:5432/poran APP_ENV=staging npm start
+```
+
+Abre em `http://localhost:3000`.
 
 ---
 
@@ -78,16 +80,14 @@ Quando precisar de alguma alteração:
 
 ```
 poran-carnes/
-├── server.js        → backend (rotas da API, autenticação)
-├── database.js      → banco de dados SQLite (tabelas, dados iniciais)
-├── package.json     → dependências Node.js
-├── .gitignore       → arquivos ignorados pelo Git
+├── server.js          → backend (rotas da API, login)
+├── database.js        → banco Postgres (tabelas, migrações, dados iniciais)
+├── env.js             → produção x teste, trava de segurança do banco
+├── seed-staging.js    → pedidos de exemplo para o ambiente de teste
+├── clients_seed.js    → lista inicial de clientes
+├── railway.json       → configuração de deploy do Railway
 └── public/
-    ├── index.html   → aplicação principal
-    └── login.html   → tela de login
+    ├── index.html     → aplicação principal
+    ├── login.html     → tela de login
+    └── env-banner.js  → faixa "AMBIENTE DE TESTE"
 ```
-
-## Dados salvos
-
-Todos os dados ficam num arquivo `poran.db` (SQLite) no servidor Railway.
-O Railway mantém esse arquivo persistente enquanto o plano estiver ativo.
