@@ -4,7 +4,8 @@
   "description": "Sistema de roteiro e pedidos - Poran Carnes",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "seed:staging": "node seed-staging.js"
   },
   "engines": {
     "node": ">=18.0.0"

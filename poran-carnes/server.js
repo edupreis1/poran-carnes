@@ -4,6 +4,8 @@ const pgSession = require('connect-pg-simple')(session);
 const bcrypt = require('bcryptjs');
 const path = require('path');
 const { Pool } = require('pg');
+const { APP_ENV, assertSafeDatabase } = require('./env');
+assertSafeDatabase();
 const { initDatabase, getDb } = require('./database');
 let db;
 
@@ -33,6 +35,9 @@ app.use(session({
   }
 }));
 app.use(express.static(path.join(__dirname, 'public')));
+
+// Público: só diz se é produção ou teste (usado pela faixa de teste)
+app.get('/api/env', (req, res) => res.json({ env: APP_ENV }));
 
 app.get('/', (req, res, next) => {
   if (!req.session?.userId) return res.redirect('/login.html');
