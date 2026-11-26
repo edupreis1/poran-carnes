@@ -361,8 +361,10 @@ app.post('/api/snapshots', requireAuth, async (req, res) => {
       await db.exec("ALTER TABLE snapshots ADD COLUMN seq_num INTEGER");
     });
     // Get next sequence number
-    const countRes = await db.prepare('SELECT COUNT(*) as c FROM snapshots').get();
-    const seqNum = (parseInt(countRes?.c) || 0) + 1;
+    // Use the highest existing number (not the count), so deleting an old
+    // snapshot never makes the next one repeat a number.
+    const maxRes = await db.prepare('SELECT COALESCE(MAX(seq_num), 0) as m, COUNT(*) as c FROM snapshots').get();
+    const seqNum = Math.max(parseInt(maxRes?.m) || 0, parseInt(maxRes?.c) || 0) + 1;
     const autoLabel = 'Pedido ' + seqNum;
     // Try with seq_num, fallback without
     try {

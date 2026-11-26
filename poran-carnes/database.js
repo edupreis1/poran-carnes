@@ -155,20 +155,7 @@ async function initDatabase() {
       console.log('Old orders deleted.');
     }
 
-    // 2. Remove 'active' orders that are older than 21 days — these are leftover from
-    //    a previous bad migration that pulled historical orders into 'active'.
-    //    Real current-week orders are always recent.
-    const staleActive = await pool.query(
-      "SELECT COUNT(*) FROM orders WHERE week_label = 'active' AND created_at < NOW() - INTERVAL '21 days'"
-    );
-    const staleCount = parseInt(staleActive.rows[0].count);
-    if(staleCount > 0) {
-      console.log(`Deleting ${staleCount} stale 'active' orders (older than 21 days, from bad migration)...`);
-      await pool.query("DELETE FROM orders WHERE week_label = 'active' AND created_at < NOW() - INTERVAL '21 days'");
-      console.log('Stale active orders deleted.');
-    }
-
-    // 3. Remove any remaining duplicates (keep newest per client_id)
+    // 2. Remove any remaining duplicates (keep newest per client_id)
     await pool.query(`
       DELETE FROM orders
       WHERE id IN (
